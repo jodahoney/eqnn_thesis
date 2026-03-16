@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eqnn-simulator"
+version = "0.1.0"
+description = "EQNN simulator scaffold with a bond-alternating Heisenberg dataset generator."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.26"]
+
+[project.scripts]
+eqnn = "eqnn.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["eqnn*"]
