@@ -58,10 +58,13 @@ python3 -m eqnn generate-dataset \
   --num-points 31 \
   --ratio-min 0.4 \
   --ratio-max 1.6 \
+  --eigensolver auto \
   --output-dir data/generated/heisenberg_n6
 ```
 
 This writes `train.npz`, `test.npz`, and `metadata.json` inside the requested output directory.
+
+For larger chains, `--eigensolver sparse` switches ground-state solves to a sparse SciPy backend. The default `auto` mode keeps dense solves for small systems and switches to sparse solves when the Hilbert space is large enough to benefit.
 
 ## Train a small QCNN
 

@@ -12,6 +12,9 @@ from eqnn.datasets.heisenberg import (
     phase_label_from_ratio,
 )
 from eqnn.datasets.io import load_dataset_bundle, save_dataset_bundle
+from eqnn.physics.spin import sparse
+
+SCIPY_AVAILABLE = sparse is not None
 
 
 class PhaseLabelTests(unittest.TestCase):
@@ -73,3 +76,30 @@ class DatasetGenerationTests(unittest.TestCase):
                 loaded.test.coupling_ratios,
             )
             self.assertEqual(bundle.metadata["num_qubits"], loaded.metadata["num_qubits"])
+
+    def test_dataset_records_solver_metadata(self) -> None:
+        bundle = generate_dataset(
+            HeisenbergDatasetConfig(
+                num_qubits=4,
+                ratio_min=0.4,
+                ratio_max=1.6,
+                num_points=13,
+                eigensolver="dense",
+            )
+        )
+        self.assertEqual(bundle.metadata["eigensolver_requested"], "dense")
+        self.assertEqual(bundle.metadata["eigensolver_resolved"], "dense")
+
+    @unittest.skipUnless(SCIPY_AVAILABLE, "scipy is required for sparse tests")
+    def test_sparse_dataset_generation_works(self) -> None:
+        bundle = generate_dataset(
+            HeisenbergDatasetConfig(
+                num_qubits=4,
+                ratio_min=0.4,
+                ratio_max=1.6,
+                num_points=9,
+                eigensolver="sparse",
+            )
+        )
+        self.assertGreater(len(bundle.train), 0)
+        self.assertEqual(bundle.metadata["eigensolver_resolved"], "sparse")

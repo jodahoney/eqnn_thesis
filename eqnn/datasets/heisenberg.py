@@ -23,6 +23,7 @@ class HeisenbergDatasetConfig:
     critical_ratio: float = 1.0
     exclusion_window: float = 0.05
     boundary: str = "open"
+    eigensolver: str = "auto"
     split_seed: int = 0
 
     def __post_init__(self) -> None:
@@ -38,6 +39,8 @@ class HeisenbergDatasetConfig:
             raise ValueError("exclusion_window must be non-negative")
         if self.boundary not in {"open", "periodic"}:
             raise ValueError("boundary must be 'open' or 'periodic'")
+        if self.eigensolver not in {"auto", "dense", "sparse"}:
+            raise ValueError("eigensolver must be 'auto', 'dense', or 'sparse'")
 
 
 @dataclass(frozen=True)
@@ -116,9 +119,10 @@ def generate_dataset(config: HeisenbergDatasetConfig) -> DatasetBundle:
     states = np.zeros((ratios.size, hamiltonian.dimension), dtype=np.complex128)
     labels = np.zeros(ratios.size, dtype=np.int64)
     energies = np.zeros(ratios.size, dtype=np.float64)
+    resolved_eigensolver = hamiltonian.resolve_ground_state_method(config.eigensolver)
 
     for index, ratio in enumerate(ratios):
-        energy, state = hamiltonian.ground_state(float(ratio))
+        energy, state = hamiltonian.ground_state(float(ratio), method=config.eigensolver)
         states[index] = state
         labels[index] = phase_label_from_ratio(
             float(ratio),
@@ -151,6 +155,8 @@ def generate_dataset(config: HeisenbergDatasetConfig) -> DatasetBundle:
         "num_qubits": int(config.num_qubits),
         "hilbert_dimension": int(hamiltonian.dimension),
         "boundary": config.boundary,
+        "eigensolver_requested": config.eigensolver,
+        "eigensolver_resolved": resolved_eigensolver,
         "ratio_min": float(config.ratio_min),
         "ratio_max": float(config.ratio_max),
         "num_requested_points": int(config.num_points),

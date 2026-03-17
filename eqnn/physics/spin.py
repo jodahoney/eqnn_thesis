@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Mapping
+from typing import Any, Mapping
 
 import numpy as np
 
 from eqnn.types import ComplexArray
+
+try:
+    from scipy import sparse
+except ImportError:  # pragma: no cover - exercised indirectly when scipy is unavailable.
+    sparse = None  # type: ignore[assignment]
 
 IDENTITY = np.eye(2, dtype=np.complex128)
 PAULI_X = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
@@ -37,3 +42,34 @@ def embed_local_operators(
 
     operators = [site_operators.get(site, IDENTITY) for site in range(num_qubits)]
     return kron_all(operators)
+
+
+def sparse_kron_all(operators: list[Any]) -> Any:
+    """Sparse Kronecker product for local operators."""
+
+    if sparse is None:
+        raise ImportError("scipy is required for sparse operator construction")
+
+    result = sparse.csr_matrix([[1.0 + 0.0j]], dtype=np.complex128)
+    for operator in operators:
+        result = sparse.kron(result, operator, format="csr")
+    return result
+
+
+def embed_local_operators_sparse(
+    num_qubits: int,
+    site_operators: Mapping[int, Any],
+) -> Any:
+    """Embed sparse single-site operators into an n-qubit Hilbert space."""
+
+    if sparse is None:
+        raise ImportError("scipy is required for sparse operator construction")
+    if num_qubits < 1:
+        raise ValueError("num_qubits must be at least 1")
+    for site in site_operators:
+        if site < 0 or site >= num_qubits:
+            raise ValueError(f"site index {site} is out of range for {num_qubits} qubits")
+
+    identity = sparse.identity(2, dtype=np.complex128, format="csr")
+    operators = [site_operators.get(site, identity) for site in range(num_qubits)]
+    return sparse_kron_all(operators)

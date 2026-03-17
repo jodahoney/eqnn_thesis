@@ -33,6 +33,11 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("open", "periodic"),
         default="open",
     )
+    dataset_parser.add_argument(
+        "--eigensolver",
+        choices=("auto", "dense", "sparse"),
+        default="auto",
+    )
     dataset_parser.add_argument("--split-seed", type=int, default=0)
     dataset_parser.add_argument("--output-dir", type=Path, required=True)
     dataset_parser.set_defaults(handler=_handle_generate_dataset)
@@ -50,6 +55,7 @@ def _handle_generate_dataset(args: argparse.Namespace) -> int:
         critical_ratio=args.critical_ratio,
         exclusion_window=args.exclusion_window,
         boundary=args.boundary,
+        eigensolver=args.eigensolver,
         split_seed=args.split_seed,
     )
     bundle = generate_dataset(config)
