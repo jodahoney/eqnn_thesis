@@ -45,3 +45,41 @@ class TrainerTests(unittest.TestCase):
 
         self.assertLess(history["best_loss"], history["loss"][0] - 0.05)
         self.assertGreaterEqual(history["best_accuracy"], 0.75)
+
+    def test_equivariant_pooling_training_improves_loss_on_a_small_six_qubit_dataset(self) -> None:
+        bundle = generate_dataset(
+            HeisenbergDatasetConfig(
+                num_qubits=6,
+                ratio_min=0.5,
+                ratio_max=1.5,
+                num_points=7,
+                split_seed=5,
+            )
+        )
+        dataset = DatasetSplit(
+            states=np.concatenate([bundle.train.states, bundle.test.states], axis=0),
+            labels=np.concatenate([bundle.train.labels, bundle.test.labels], axis=0),
+            coupling_ratios=np.concatenate(
+                [bundle.train.coupling_ratios, bundle.test.coupling_ratios],
+                axis=0,
+            ),
+            ground_state_energies=np.concatenate(
+                [bundle.train.ground_state_energies, bundle.test.ground_state_energies],
+                axis=0,
+            ),
+        )
+        model = SU2QCNN(
+            QCNNConfig(num_qubits=6, min_readout_qubits=4, pooling_mode="equivariant")
+        )
+        trainer = Trainer(
+            TrainingConfig(
+                epochs=12,
+                learning_rate=0.1,
+                finite_difference_eps=1e-3,
+            )
+        )
+
+        history = trainer.fit(model, dataset)
+
+        self.assertLess(history["best_loss"], history["loss"][0] - 0.005)
+        self.assertGreaterEqual(history["best_accuracy"], 2.0 / 3.0)

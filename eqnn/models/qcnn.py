@@ -8,7 +8,12 @@ from typing import Iterable
 import numpy as np
 
 from eqnn.layers.convolution import SU2SwapConvolution, SU2SwapConvolutionConfig
-from eqnn.layers.pooling import PartialTracePooling, PartialTracePoolingConfig
+from eqnn.layers.pooling import (
+    PartialTracePooling,
+    PartialTracePoolingConfig,
+    SU2EquivariantPooling,
+    SU2EquivariantPoolingConfig,
+)
 from eqnn.physics.observables import alternating_singlet_means, dimerization_feature
 from eqnn.physics.quantum import as_density_matrix
 from eqnn.types import ComplexArray
@@ -21,6 +26,7 @@ class QCNNConfig:
     boundary: str = "open"
     parity_sequence: tuple[str, ...] = ("even", "odd")
     shared_convolution_parameter: bool = True
+    pooling_mode: str = "partial_trace"
     pooling_keep: str = "left"
     symmetry_group: str = "SU(2)"
 
@@ -38,6 +44,8 @@ class QCNNConfig:
             raise ValueError("min_readout_qubits must lie in [2, num_qubits]")
         if self.boundary not in {"open", "periodic"}:
             raise ValueError("boundary must be 'open' or 'periodic'")
+        if self.pooling_mode not in {"partial_trace", "equivariant"}:
+            raise ValueError("pooling_mode must be 'partial_trace' or 'equivariant'")
 
 
 @dataclass(frozen=True)
@@ -74,17 +82,17 @@ class SU2QCNN:
             for num_qubits in self.block_num_qubits
         ]
         self.poolings = [
-            PartialTracePooling(
-                PartialTracePoolingConfig(num_qubits=num_qubits, keep=self.config.pooling_keep)
-            )
+            self._build_pooling(num_qubits)
             for num_qubits in self.block_num_qubits[:-1]
         ]
         self._convolution_slices = self._build_convolution_slices()
+        self._pooling_slices = self._build_pooling_slices()
+        self._readout_slice = self._build_readout_slice()
         self.parameters = self._initialize_parameters(parameters)
 
     @property
     def parameter_count(self) -> int:
-        return self._convolution_slices[-1].stop + 2
+        return self._readout_slice.stop
 
     def get_parameters(self) -> np.ndarray:
         return self.parameters.copy()
@@ -131,13 +139,15 @@ class SU2QCNN:
             convolution_parameters = parameter_array[self._convolution_slices[block_index]]
             current_density = convolution.apply(current_density, parameters=convolution_parameters)
             if block_index < len(self.poolings):
-                current_density = self.poolings[block_index](current_density)
+                pooling = self.poolings[block_index]
+                pooling_parameters = parameter_array[self._pooling_slices[block_index]]
+                current_density = pooling.apply(current_density, parameters=pooling_parameters)
 
         return self._finalize_forward_pass(
             current_density,
             self.block_num_qubits[-1],
-            parameter_array[-2],
-            parameter_array[-1],
+            parameter_array[self._readout_slice][0],
+            parameter_array[self._readout_slice][1],
         )
 
     def _build_block_num_qubits(self) -> list[int]:
@@ -158,13 +168,43 @@ class SU2QCNN:
             stop = start + convolution.parameter_count
             slices.append(slice(start, stop))
             start = stop
-        if not slices:
-            slices.append(slice(0, 0))
         return slices
+
+    def _build_pooling_slices(self) -> list[slice]:
+        slices: list[slice] = []
+        start = self._convolution_slices[-1].stop if self._convolution_slices else 0
+        for pooling in self.poolings:
+            stop = start + pooling.parameter_count
+            slices.append(slice(start, stop))
+            start = stop
+        return slices
+
+    def _build_readout_slice(self) -> slice:
+        start = self._pooling_slices[-1].stop if self._pooling_slices else (
+            self._convolution_slices[-1].stop if self._convolution_slices else 0
+        )
+        return slice(start, start + 2)
+
+    def _build_pooling(self, num_qubits: int) -> PartialTracePooling | SU2EquivariantPooling:
+        if self.config.pooling_mode == "partial_trace":
+            return PartialTracePooling(
+                PartialTracePoolingConfig(num_qubits=num_qubits, keep=self.config.pooling_keep)
+            )
+        return SU2EquivariantPooling(
+            SU2EquivariantPoolingConfig(
+                num_qubits=num_qubits,
+                warm_start=self.config.pooling_keep,
+            )
+        )
 
     def _initialize_parameters(self, parameters: Iterable[float] | None) -> np.ndarray:
         if parameters is None:
-            return np.zeros(self.parameter_count, dtype=np.float64)
+            default_parameters = [convolution.get_parameters() for convolution in self.convolutions]
+            default_parameters.extend(
+                np.asarray(pooling.parameters, dtype=np.float64).copy() for pooling in self.poolings
+            )
+            default_parameters.append(np.zeros(2, dtype=np.float64))
+            return np.asarray(np.concatenate(default_parameters), dtype=np.float64)
         return self._validate_parameters(parameters)
 
     def _validate_parameters(self, parameters: Iterable[float]) -> np.ndarray:

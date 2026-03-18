@@ -7,6 +7,7 @@ This repository now contains a working first pass of an equivariant quantum neur
 - phase labels derived from the coupling ratio,
 - an SU(2)-equivariant convolution layer built from `exp(-i theta SWAP)`,
 - a physically valid pooling layer based on partial trace,
+- a trainable SU(2)-equivariant pooling family using the full paper-style `2 -> 1` CPTP channel basis,
 - a QCNN forward pass with an SU(2)-invariant dimerization readout,
 - a small training loop and symmetry-verification utilities.
 
@@ -80,6 +81,8 @@ model = SU2QCNN(QCNNConfig(num_qubits=4, min_readout_qubits=4))
 trainer = Trainer(TrainingConfig(epochs=20, learning_rate=0.1))
 history = trainer.fit(model, dataset.train)
 ```
+
+If you want the paper-derived pooling family instead of fixed partial trace, set `pooling_mode="equivariant"` in `QCNNConfig`.
 
 ## Run the tests
 

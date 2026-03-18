@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import unittest
 
+import numpy as np
+
 from eqnn.models.qcnn import QCNNConfig, SU2QCNN
 from eqnn.physics.heisenberg import BondAlternatingHeisenbergHamiltonian
 from eqnn.verification.equivariance import model_invariance_error
@@ -45,4 +47,34 @@ class SU2QCNNTests(unittest.TestCase):
             parameters=(0.27, -0.19, 3.0, -0.2),
         )
         summary = model_invariance_error(model, num_trials=5, seed=19)
+        self.assertLess(summary["max_error"], 1e-10)
+
+    def test_equivariant_pooling_model_matches_partial_trace_limit(self) -> None:
+        hamiltonian = BondAlternatingHeisenbergHamiltonian(num_qubits=6)
+        _, state = hamiltonian.ground_state(1.1)
+        partial_trace_model = SU2QCNN(
+            QCNNConfig(num_qubits=6, min_readout_qubits=4, pooling_mode="partial_trace"),
+            parameters=(0.1, -0.2, 0.05, 0.3, 1.7, -0.4),
+        )
+        equivariant_model = SU2QCNN(
+            QCNNConfig(num_qubits=6, min_readout_qubits=4, pooling_mode="equivariant"),
+            parameters=(0.1, -0.2, 0.05, 0.3, -20.0, 20.0, 0.0, 1.7, -0.4),
+        )
+
+        partial_forward = partial_trace_model.forward(state)
+        equivariant_forward = equivariant_model.forward(state)
+
+        np.testing.assert_allclose(
+            equivariant_forward.final_density_matrix,
+            partial_forward.final_density_matrix,
+            atol=1e-6,
+        )
+        self.assertAlmostEqual(equivariant_forward.probability, partial_forward.probability, places=6)
+
+    def test_equivariant_pooling_model_is_su2_invariant(self) -> None:
+        model = SU2QCNN(
+            QCNNConfig(num_qubits=6, min_readout_qubits=4, pooling_mode="equivariant"),
+            parameters=(0.1, -0.2, 0.05, 0.3, 0.7, -0.1, 0.2, 1.5, -0.1),
+        )
+        summary = model_invariance_error(model, num_trials=5, seed=27)
         self.assertLess(summary["max_error"], 1e-10)
