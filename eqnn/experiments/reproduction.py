@@ -10,11 +10,7 @@ from typing import Any
 
 import numpy as np
 
-from eqnn.datasets.heisenberg import (
-    DatasetBundle,
-    DatasetSplit,
-    phase_label_from_ratio,
-)
+from eqnn.datasets.heisenberg import DatasetBundle, DatasetSplit
 from eqnn.datasets.io import save_dataset_bundle
 from eqnn.experiments.runner import ExperimentConfig, run_training_experiment
 from eqnn.physics.heisenberg import BondAlternatingHeisenbergHamiltonian
@@ -64,7 +60,7 @@ class PaperReproductionConfig:
     num_qubits: int
     train_sizes: tuple[int, ...] = (2, 4, 6, 8, 10, 12)
     random_seeds: tuple[int, ...] = (0, 1, 2)
-    epochs: int = 30
+    epochs: int = 750
     learning_rate: float = 5e-2
     gradient_backend: str = "exact"
     initialization_strategy: str = "noisy_current"
@@ -145,13 +141,15 @@ def generate_paper_dataset(config: PaperDatasetConfig) -> DatasetBundle:
         "eigensolver_requested": config.eigensolver,
         "eigensolver_resolved": hamiltonian.resolve_ground_state_method(config.eigensolver),
         "phase_labels": {
-            "0": "coupling_ratio < critical_ratio",
-            "1": "coupling_ratio > critical_ratio",
+            "1": "trivial phase (coupling_ratio < critical_ratio)",
+            "0": "topological phase (coupling_ratio > critical_ratio)",
         },
+        "label_convention": "paper_reproduction_v1_swap_aligned",
         "notes": [
             "This dataset is locked to the paper_reproduction_v1 protocol.",
             "The training grid is symmetric around the critical ratio so every train set spans both phases.",
             "The dense test grid omits the exact critical point to keep labels unambiguous.",
+            "Paper reproduction labels are aligned with the SWAP readout direction: larger outputs map to the trivial phase.",
         ],
     }
     return DatasetBundle(train=train_split, test=test_split, metadata=metadata)
@@ -277,11 +275,7 @@ def _build_split_from_ratios(
         energy, state = hamiltonian.ground_state(float(ratio), method=config.eigensolver)
         states[index] = state
         energies[index] = energy
-        labels[index] = phase_label_from_ratio(
-            float(ratio),
-            critical_ratio=config.critical_ratio,
-            exclusion_window=0.0,
-        )
+        labels[index] = 1 if float(ratio) < config.critical_ratio else 0
 
         density_matrix = as_density_matrix(state)
         primary_mean, secondary_mean = alternating_singlet_means(

@@ -1,0 +1,41 @@
+{
+  "boundary": "open",
+  "critical_ratio": 1.0,
+  "dataset_name": "bond_alternating_heisenberg_paper_reproduction_v1",
+  "dense_test_points_requested": 11,
+  "dense_test_points_used": 10,
+  "eigensolver_requested": "auto",
+  "eigensolver_resolved": "dense",
+  "label_convention": "paper_reproduction_v1_swap_aligned",
+  "left_ratio_min": 0.0,
+  "notes": [
+    "This dataset is locked to the paper_reproduction_v1 protocol.",
+    "The training grid is symmetric around the critical ratio so every train set spans both phases.",
+    "The dense test grid omits the exact critical point to keep labels unambiguous.",
+    "Paper reproduction labels are aligned with the SWAP readout direction: larger outputs map to the trivial phase."
+  ],
+  "num_qubits": 4,
+  "phase_labels": {
+    "0": "topological phase (coupling_ratio > critical_ratio)",
+    "1": "trivial phase (coupling_ratio < critical_ratio)"
+  },
+  "protocol": "paper_reproduction_v1",
+  "right_ratio_max": 2.0,
+  "test_ratios": [
+    0.0,
+    0.2,
+    0.4,
+    0.6000000000000001,
+    0.8,
+    1.2000000000000002,
+    1.4000000000000001,
+    1.6,
+    1.8,
+    2.0
+  ],
+  "train_ratios": [
+    0.5,
+    1.5
+  ],
+  "train_size": 2
+}

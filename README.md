@@ -173,7 +173,9 @@ The repo now includes a locked `paper_reproduction_v1` path that fixes:
 - shared SU(2)-equivariant brickwork convolutions
 - open-boundary bond-alternating Heisenberg data
 - `ADAM`, `MSE`, batch size `2`
+- `E = 750` epochs
 - threshold initialization at `0.5` with epochwise updates from the nearest points to the critical ratio
+- paper-aligned labels so larger SWAP outputs correspond to the trivial side of the transition
 
 For a smoke run:
 
@@ -182,7 +184,7 @@ python3 -m eqnn run-paper-reproduction \
   --num-qubits 4 \
   --train-sizes 2 4 6 \
   --random-seeds 0 1 2 \
-  --epochs 30 \
+  --epochs 750 \
   --output-dir data/reproduction/paper_reproduction_v1
 ```
 

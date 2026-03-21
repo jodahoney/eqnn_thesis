@@ -1,0 +1,157 @@
+{
+  "classification_threshold": 0.9028827576553171,
+  "dataset_metadata": {
+    "boundary": "open",
+    "critical_ratio": 1.0,
+    "dataset_name": "bond_alternating_heisenberg_paper_reproduction_v1",
+    "dense_test_points_requested": 11,
+    "dense_test_points_used": 10,
+    "eigensolver_requested": "auto",
+    "eigensolver_resolved": "dense",
+    "label_convention": "paper_reproduction_v1_swap_aligned",
+    "left_ratio_min": 0.0,
+    "notes": [
+      "This dataset is locked to the paper_reproduction_v1 protocol.",
+      "The training grid is symmetric around the critical ratio so every train set spans both phases.",
+      "The dense test grid omits the exact critical point to keep labels unambiguous.",
+      "Paper reproduction labels are aligned with the SWAP readout direction: larger outputs map to the trivial phase."
+    ],
+    "num_qubits": 4,
+    "phase_labels": {
+      "0": "topological phase (coupling_ratio > critical_ratio)",
+      "1": "trivial phase (coupling_ratio < critical_ratio)"
+    },
+    "protocol": "paper_reproduction_v1",
+    "right_ratio_max": 2.0,
+    "test_ratios": [
+      0.0,
+      0.2,
+      0.4,
+      0.6000000000000001,
+      0.8,
+      1.2000000000000002,
+      1.4000000000000001,
+      1.6,
+      1.8,
+      2.0
+    ],
+    "train_ratios": [
+      0.5,
+      1.5
+    ],
+    "train_size": 2
+  },
+  "experiment_config": {
+    "boundary": "open",
+    "min_readout_qubits": null,
+    "model_family": "su2_qcnn",
+    "num_qubits": 4,
+    "parity_sequence": [
+      "even",
+      "odd"
+    ],
+    "pooling_keep": "left",
+    "pooling_mode": "partial_trace",
+    "readout_mode": "swap",
+    "shared_convolution_parameter": true
+  },
+  "experiment_name": "paper_reproduction_v1_n4_train2_seed0",
+  "history": {
+    "accuracy": [
+      0.5,
+      0.0
+    ],
+    "best_accuracy": 0.0,
+    "best_loss": 0.48052097313537206,
+    "best_parameters": [
+      0.05628649986947002,
+      -0.05660522215071951,
+      0.03202113251790652
+    ],
+    "best_restart": 0,
+    "best_threshold": 0.9028827576553171,
+    "final_parameters": [
+      0.05628649986947002,
+      -0.05660522215071951,
+      0.03202113251790652
+    ],
+    "final_threshold": 0.9028827576553171,
+    "initial_parameters": [
+      0.006286511054669665,
+      -0.006605243164565094,
+      0.032021132522164104
+    ],
+    "loss": [
+      0.4970029921861026,
+      0.48052097313537206
+    ],
+    "restart_histories": [
+      {
+        "accuracy": [
+          0.5,
+          0.0
+        ],
+        "best_accuracy": 0.0,
+        "best_loss": 0.48052097313537206,
+        "best_parameters": [
+          0.05628649986947002,
+          -0.05660522215071951,
+          0.03202113251790652
+        ],
+        "best_threshold": 0.9028827576553171,
+        "final_parameters": [
+          0.05628649986947002,
+          -0.05660522215071951,
+          0.03202113251790652
+        ],
+        "final_threshold": 0.9028827576553171,
+        "initial_parameters": [
+          0.006286511054669665,
+          -0.006605243164565094,
+          0.032021132522164104
+        ],
+        "loss": [
+          0.4970029921861026,
+          0.48052097313537206
+        ],
+        "threshold": [
+          0.5,
+          0.9028827576553171
+        ]
+      }
+    ],
+    "threshold": [
+      0.5,
+      0.9028827576553171
+    ]
+  },
+  "parameter_count": 3,
+  "test_metrics": {
+    "accuracy": 0.0,
+    "loss": 0.48455303778068437
+  },
+  "train_metrics": {
+    "accuracy": 0.0,
+    "loss": 0.48052097313537206
+  },
+  "training_config": {
+    "batch_size": 2,
+    "beta1": 0.9,
+    "beta2": 0.999,
+    "classification_threshold": 0.5,
+    "epochs": 1,
+    "epsilon": 1e-08,
+    "finite_difference_eps": 0.001,
+    "gradient_backend": "exact",
+    "initialization_noise_scale": 0.05,
+    "initialization_strategy": "noisy_current",
+    "learning_rate": 0.05,
+    "loss": "mse",
+    "num_restarts": 1,
+    "optimizer": "adam",
+    "random_seed": 0,
+    "restore_best": true,
+    "threshold_critical_ratio": 1.0,
+    "threshold_update": "paper_nearest_critical"
+  }
+}

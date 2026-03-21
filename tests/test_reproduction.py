@@ -36,6 +36,10 @@ class PaperReproductionTests(unittest.TestCase):
         self.assertTrue(np.all(dataset.train.coupling_ratios < 2.0))
         self.assertTrue(np.all(dataset.train.coupling_ratios != 1.0))
         self.assertEqual(dataset.metadata["protocol"], "paper_reproduction_v1")
+        self.assertEqual(dataset.metadata["label_convention"], "paper_reproduction_v1_swap_aligned")
+        for ratio, label in zip(dataset.train.coupling_ratios, dataset.train.labels):
+            expected_label = 1 if ratio < 1.0 else 0
+            self.assertEqual(int(label), expected_label)
 
     def test_paper_reproduction_suite_writes_summary_and_phase_diagram_outputs(self) -> None:
         config = PaperReproductionConfig(

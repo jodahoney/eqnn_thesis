@@ -111,7 +111,7 @@ def build_parser() -> argparse.ArgumentParser:
     reproduction_parser.add_argument("--num-qubits", type=int, required=True)
     reproduction_parser.add_argument("--train-sizes", type=int, nargs="+", default=(2, 4, 6, 8, 10, 12))
     reproduction_parser.add_argument("--random-seeds", type=int, nargs="+", default=(0, 1, 2))
-    reproduction_parser.add_argument("--epochs", type=int, default=30)
+    reproduction_parser.add_argument("--epochs", type=int, default=750)
     reproduction_parser.add_argument("--learning-rate", type=float, default=5e-2)
     reproduction_parser.add_argument(
         "--gradient-backend",

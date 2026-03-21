@@ -1,0 +1,2 @@
+train_size,num_runs,mean_train_accuracy,variance_train_accuracy,mean_test_accuracy,variance_test_accuracy,mean_train_loss,variance_train_loss,mean_test_loss,variance_test_loss,mean_threshold,variance_threshold,phase_diagram_path
+2,1,0.0,0.0,0.0,0.0,0.48052097313537206,0.0,0.48455303778068437,0.0,0.9028827576553171,0.0,/Users/joda/Desktop/stanford/eqnn_thesis/data/reproduction/paper_reproduction_smoke_label_fix/phase_diagrams/train_size_2_phase_diagram.npz
