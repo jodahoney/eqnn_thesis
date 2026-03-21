@@ -114,6 +114,8 @@ The trainer also now supports `gradient_backend="auto" | "exact" | "finite_diffe
 
 If you want the paper-derived pooling family instead of fixed partial trace, set `pooling_mode="equivariant"` in `QCNNConfig`.
 
+Training now also supports explicit `loss="bce" | "mse"`, minibatching via `batch_size`, and paper-style threshold updates via `threshold_update="paper_nearest_critical"`.
+
 ## Run an experiment
 
 You can train either the equivariant QCNN or the symmetry-agnostic baseline and save artifacts:
@@ -160,6 +162,31 @@ python3 -m eqnn summarize-experiments \
   --output-json data/benchmarks/small_grid/n4_summary.json \
   --output-csv data/benchmarks/small_grid/n4_summary.csv
 ```
+
+## Run the Paper Reproduction Baseline
+
+The repo now includes a locked `paper_reproduction_v1` path that fixes:
+
+- `model_family=su2_qcnn`
+- `pooling_mode=partial_trace`
+- `readout_mode=swap`
+- shared SU(2)-equivariant brickwork convolutions
+- open-boundary bond-alternating Heisenberg data
+- `ADAM`, `MSE`, batch size `2`
+- threshold initialization at `0.5` with epochwise updates from the nearest points to the critical ratio
+
+For a smoke run:
+
+```bash
+python3 -m eqnn run-paper-reproduction \
+  --num-qubits 4 \
+  --train-sizes 2 4 6 \
+  --random-seeds 0 1 2 \
+  --epochs 30 \
+  --output-dir data/reproduction/paper_reproduction_v1
+```
+
+This writes per-seed experiment artifacts, per-train-size phase-diagram summaries, and aggregate `summary.json` / `summary.csv`.
 
 ## Run the tests
 

@@ -11,7 +11,9 @@ from eqnn.datasets.io import load_dataset_bundle, save_dataset_bundle
 from eqnn.experiments import (
     BenchmarkSweepConfig,
     ExperimentConfig,
+    PaperReproductionConfig,
     run_benchmark_sweep,
+    run_paper_reproduction_suite,
     run_training_experiment,
     summarize_experiment_directory,
 )
@@ -101,6 +103,38 @@ def build_parser() -> argparse.ArgumentParser:
     _add_training_args(sweep_parser)
     sweep_parser.add_argument("--output-dir", type=Path, required=True)
     sweep_parser.set_defaults(handler=_handle_run_benchmark_sweep)
+
+    reproduction_parser = subparsers.add_parser(
+        "run-paper-reproduction",
+        help="Run the locked paper_reproduction_v1 SU(2)-EQCNN baseline.",
+    )
+    reproduction_parser.add_argument("--num-qubits", type=int, required=True)
+    reproduction_parser.add_argument("--train-sizes", type=int, nargs="+", default=(2, 4, 6, 8, 10, 12))
+    reproduction_parser.add_argument("--random-seeds", type=int, nargs="+", default=(0, 1, 2))
+    reproduction_parser.add_argument("--epochs", type=int, default=30)
+    reproduction_parser.add_argument("--learning-rate", type=float, default=5e-2)
+    reproduction_parser.add_argument(
+        "--gradient-backend",
+        choices=("auto", "exact", "finite_difference"),
+        default="exact",
+    )
+    reproduction_parser.add_argument(
+        "--initialization-strategy",
+        choices=("current", "noisy_current"),
+        default="noisy_current",
+    )
+    reproduction_parser.add_argument("--initialization-noise-scale", type=float, default=5e-2)
+    reproduction_parser.add_argument("--critical-ratio", type=float, default=1.0)
+    reproduction_parser.add_argument("--left-ratio-min", type=float, default=0.0)
+    reproduction_parser.add_argument("--right-ratio-max", type=float, default=2.0)
+    reproduction_parser.add_argument("--dense-test-points", type=int, default=101)
+    reproduction_parser.add_argument(
+        "--eigensolver",
+        choices=("auto", "dense", "sparse"),
+        default="auto",
+    )
+    reproduction_parser.add_argument("--output-dir", type=Path, required=True)
+    reproduction_parser.set_defaults(handler=_handle_run_paper_reproduction)
 
     summary_parser = subparsers.add_parser(
         "summarize-experiments",
@@ -201,6 +235,29 @@ def _handle_run_benchmark_sweep(args: argparse.Namespace) -> int:
     results = run_benchmark_sweep(sweep_config, args.output_dir)
 
     print(f"Completed {len(results)} experiments")
+    print(f"Summary written to {(args.output_dir / 'summary.csv').resolve()}")
+    return 0
+
+
+def _handle_run_paper_reproduction(args: argparse.Namespace) -> int:
+    config = PaperReproductionConfig(
+        num_qubits=args.num_qubits,
+        train_sizes=tuple(args.train_sizes),
+        random_seeds=tuple(args.random_seeds),
+        epochs=args.epochs,
+        learning_rate=args.learning_rate,
+        gradient_backend=args.gradient_backend,
+        initialization_strategy=args.initialization_strategy,
+        initialization_noise_scale=args.initialization_noise_scale,
+        critical_ratio=args.critical_ratio,
+        left_ratio_min=args.left_ratio_min,
+        right_ratio_max=args.right_ratio_max,
+        dense_test_points=args.dense_test_points,
+        eigensolver=args.eigensolver,
+    )
+    results = run_paper_reproduction_suite(config, args.output_dir)
+
+    print(f"Completed {len(results['runs'])} paper reproduction runs")
     print(f"Summary written to {(args.output_dir / 'summary.csv').resolve()}")
     return 0
 
@@ -311,6 +368,8 @@ def _add_model_args(parser: argparse.ArgumentParser) -> None:
 def _add_training_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--epochs", type=int, default=50)
     parser.add_argument("--learning-rate", type=float, default=5e-2)
+    parser.add_argument("--loss", choices=("bce", "mse"), default="bce")
+    parser.add_argument("--batch-size", type=int, default=None)
     parser.add_argument("--finite-difference-eps", type=float, default=1e-3)
     parser.add_argument(
         "--gradient-backend",
@@ -327,6 +386,13 @@ def _add_training_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--initialization-noise-scale", type=float, default=5e-2)
     parser.add_argument("--num-restarts", type=int, default=1)
     parser.add_argument("--random-seed", type=int, default=None)
+    parser.add_argument("--classification-threshold", type=float, default=0.5)
+    parser.add_argument(
+        "--threshold-update",
+        choices=("none", "paper_nearest_critical"),
+        default="none",
+    )
+    parser.add_argument("--threshold-critical-ratio", type=float, default=1.0)
 
 
 def _dataset_config_from_args(args: argparse.Namespace) -> HeisenbergDatasetConfig:
@@ -351,6 +417,8 @@ def _training_config_from_args(args: argparse.Namespace) -> TrainingConfig:
     return TrainingConfig(
         epochs=args.epochs,
         learning_rate=args.learning_rate,
+        loss=args.loss,
+        batch_size=args.batch_size,
         finite_difference_eps=args.finite_difference_eps,
         gradient_backend=args.gradient_backend,
         optimizer=args.optimizer,
@@ -359,6 +427,9 @@ def _training_config_from_args(args: argparse.Namespace) -> TrainingConfig:
         initialization_noise_scale=args.initialization_noise_scale,
         num_restarts=args.num_restarts,
         random_seed=args.random_seed,
+        classification_threshold=args.classification_threshold,
+        threshold_update=args.threshold_update,
+        threshold_critical_ratio=args.threshold_critical_ratio,
     )
 
 

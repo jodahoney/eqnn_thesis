@@ -84,3 +84,37 @@ class TrainerTests(unittest.TestCase):
         self.assertLess(history["best_loss"], history["loss"][0] - 0.4)
         self.assertGreaterEqual(history["best_accuracy"], 0.95)
         self.assertEqual(history["best_restart"], 0)
+
+    def test_paper_threshold_update_uses_nearest_points_across_the_transition(self) -> None:
+        class DummyThresholdModel:
+            def __init__(self) -> None:
+                self.threshold = 0.5
+
+            def set_classification_threshold(self, threshold: float) -> None:
+                self.threshold = float(threshold)
+
+            def get_classification_threshold(self) -> float:
+                return self.threshold
+
+            def predict_batch(self, states: np.ndarray, parameters: np.ndarray | None = None) -> np.ndarray:
+                return np.asarray(np.real(states[:, 0]), dtype=np.float64)
+
+        split = DatasetSplit(
+            states=np.asarray([[0.1], [0.2], [0.6], [0.9]], dtype=np.complex128),
+            labels=np.asarray([0, 0, 1, 1], dtype=np.int64),
+            coupling_ratios=np.asarray([0.2, 0.9, 1.1, 1.8], dtype=np.float64),
+            ground_state_energies=np.zeros(4, dtype=np.float64),
+        )
+        trainer = Trainer(
+            TrainingConfig(
+                loss="mse",
+                batch_size=2,
+                threshold_update="paper_nearest_critical",
+                threshold_critical_ratio=1.0,
+            )
+        )
+        model = DummyThresholdModel()
+
+        trainer._maybe_update_classification_threshold(model, split, np.zeros(0, dtype=np.float64))
+
+        self.assertAlmostEqual(model.get_classification_threshold(), 0.4, places=12)

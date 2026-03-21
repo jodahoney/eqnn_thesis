@@ -103,6 +103,7 @@ class SU2QCNN:
         self._pooling_slices = self._build_pooling_slices()
         self._readout_slice = self._build_readout_slice()
         self.parameters = self._initialize_parameters(parameters)
+        self.classification_threshold = 0.5
 
     @property
     def parameter_count(self) -> int:
@@ -113,6 +114,14 @@ class SU2QCNN:
 
     def set_parameters(self, parameters: Iterable[float]) -> None:
         self.parameters = self._validate_parameters(parameters)
+
+    def get_classification_threshold(self) -> float:
+        return float(self.classification_threshold)
+
+    def set_classification_threshold(self, threshold: float) -> None:
+        if not 0.0 <= float(threshold) <= 1.0:
+            raise ValueError("classification_threshold must lie in [0, 1]")
+        self.classification_threshold = float(threshold)
 
     def predict(self, state: ComplexArray, parameters: Iterable[float] | None = None) -> float:
         return self.forward(state, parameters=parameters).probability
@@ -127,6 +136,16 @@ class SU2QCNN:
             dtype=np.float64,
         )
 
+    def predict_labels_batch(
+        self,
+        states: ComplexArray,
+        parameters: Iterable[float] | None = None,
+        *,
+        threshold: float | None = None,
+    ) -> np.ndarray:
+        threshold_value = self.classification_threshold if threshold is None else float(threshold)
+        return (self.predict_batch(states, parameters=parameters) >= threshold_value).astype(np.int64)
+
     def binary_cross_entropy(
         self,
         states: ComplexArray,
@@ -140,6 +159,30 @@ class SU2QCNN:
         )
         return float(loss)
 
+    def mean_squared_error(
+        self,
+        states: ComplexArray,
+        labels: np.ndarray,
+        parameters: Iterable[float] | None = None,
+    ) -> float:
+        probabilities = self.predict_batch(states, parameters=parameters)
+        labels_array = np.asarray(labels, dtype=np.float64)
+        return float(np.mean((probabilities - labels_array) ** 2))
+
+    def loss(
+        self,
+        states: ComplexArray,
+        labels: np.ndarray,
+        parameters: Iterable[float] | None = None,
+        *,
+        loss_name: str = "bce",
+    ) -> float:
+        if loss_name == "mse":
+            return self.mean_squared_error(states, labels, parameters=parameters)
+        if loss_name != "bce":
+            raise ValueError("loss_name must be 'bce' or 'mse'")
+        return self.binary_cross_entropy(states, labels, parameters=parameters)
+
     def loss_gradient(
         self,
         states: ComplexArray,
@@ -147,7 +190,10 @@ class SU2QCNN:
         parameters: Iterable[float] | None = None,
         *,
         finite_difference_eps: float = 1e-3,
+        loss_name: str = "bce",
     ) -> np.ndarray:
+        if loss_name not in {"bce", "mse"}:
+            raise ValueError("loss_name must be 'bce' or 'mse'")
         parameter_array = self.parameters if parameters is None else self._validate_parameters(parameters)
         states_array = np.asarray(states, dtype=np.complex128)
         labels_array = np.asarray(labels, dtype=np.float64)
@@ -174,6 +220,7 @@ class SU2QCNN:
                 float(label),
                 parameter_array,
                 unsupported_pooling_indices=unsupported_pooling_indices,
+                loss_name=loss_name,
             )
 
         gradient /= float(labels_array.size)
@@ -183,6 +230,9 @@ class SU2QCNN:
             offset[index] = finite_difference_eps
             loss_plus = self.binary_cross_entropy(states_array, labels_array, parameters=parameter_array + offset)
             loss_minus = self.binary_cross_entropy(states_array, labels_array, parameters=parameter_array - offset)
+            if loss_name == "mse":
+                loss_plus = self.mean_squared_error(states_array, labels_array, parameters=parameter_array + offset)
+                loss_minus = self.mean_squared_error(states_array, labels_array, parameters=parameter_array - offset)
             gradient[index] = (loss_plus - loss_minus) / (2.0 * finite_difference_eps)
 
         return np.asarray(gradient, dtype=np.float64)
@@ -330,6 +380,7 @@ class SU2QCNN:
         parameter_array: np.ndarray,
         *,
         unsupported_pooling_indices: np.ndarray,
+        loss_name: str,
     ) -> np.ndarray:
         final_density, caches = self._forward_with_cache(state, parameter_array)
         adjoint, readout_gradient = self._readout_loss_gradient(
@@ -337,6 +388,7 @@ class SU2QCNN:
             self.block_num_qubits[-1],
             parameter_array[self._readout_slice],
             label,
+            loss_name=loss_name,
         )
 
         sample_gradient = np.zeros_like(parameter_array)
@@ -428,17 +480,24 @@ class SU2QCNN:
         num_qubits: int,
         readout_parameters: np.ndarray,
         label: float,
+        *,
+        loss_name: str,
     ) -> tuple[ComplexArray, np.ndarray]:
+        if loss_name not in {"bce", "mse"}:
+            raise ValueError("loss_name must be 'bce' or 'mse'")
         probability_floor = 1e-8
         if self.config.readout_mode == "swap":
             probability = float(np.clip(0.5 * (swap_expectation(density_matrix) + 1.0), 0.0, 1.0))
-            clipped_probability = float(np.clip(probability, probability_floor, 1.0 - probability_floor))
-            if probability <= probability_floor or probability >= 1.0 - probability_floor:
-                loss_probability_gradient = 0.0
+            if loss_name == "mse":
+                loss_probability_gradient = 2.0 * (probability - label)
             else:
-                loss_probability_gradient = float(
-                    (clipped_probability - label) / (clipped_probability * (1.0 - clipped_probability))
-                )
+                clipped_probability = float(np.clip(probability, probability_floor, 1.0 - probability_floor))
+                if probability <= probability_floor or probability >= 1.0 - probability_floor:
+                    loss_probability_gradient = 0.0
+                else:
+                    loss_probability_gradient = float(
+                        (clipped_probability - label) / (clipped_probability * (1.0 - clipped_probability))
+                    )
             observable_gradient = 0.5 * loss_probability_gradient * SWAP_OPERATOR
             return np.asarray(observable_gradient, dtype=np.complex128), np.zeros(0, dtype=np.float64)
 
@@ -448,11 +507,13 @@ class SU2QCNN:
         readout_bias = float(readout_parameters[1])
         logit = float(readout_weight * feature_value + readout_bias)
         probability = float(1.0 / (1.0 + np.exp(-logit)))
-        clipped_probability = float(np.clip(probability, probability_floor, 1.0 - probability_floor))
-        if probability <= probability_floor or probability >= 1.0 - probability_floor:
-            loss_logit_gradient = 0.0
+        if loss_name == "mse":
+            loss_logit_gradient = 2.0 * (probability - label) * probability * (1.0 - probability)
         else:
-            loss_logit_gradient = probability - label
+            if probability <= probability_floor or probability >= 1.0 - probability_floor:
+                loss_logit_gradient = 0.0
+            else:
+                loss_logit_gradient = probability - label
 
         observable_gradient = loss_logit_gradient * readout_weight * feature_operator
         readout_gradient = np.asarray(

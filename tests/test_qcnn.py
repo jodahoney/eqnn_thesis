@@ -60,6 +60,18 @@ class SU2QCNNTests(unittest.TestCase):
         self.assertLess(low_forward.swap_expectation, high_forward.swap_expectation)
         self.assertLess(low_forward.probability, high_forward.probability)
 
+    def test_prediction_labels_respect_the_current_classification_threshold(self) -> None:
+        hamiltonian = BondAlternatingHeisenbergHamiltonian(num_qubits=4)
+        _, low_ratio_state = hamiltonian.ground_state(0.4)
+        _, high_ratio_state = hamiltonian.ground_state(1.6)
+        model = SU2QCNN(QCNNConfig(num_qubits=4))
+
+        probabilities = model.predict_batch(np.stack([low_ratio_state, high_ratio_state], axis=0))
+        model.set_classification_threshold(float(np.mean(probabilities)))
+        labels = model.predict_labels_batch(np.stack([low_ratio_state, high_ratio_state], axis=0))
+
+        self.assertEqual(labels.tolist(), [0, 1])
+
     def test_legacy_dimerization_readout_tracks_bond_dimerization(self) -> None:
         hamiltonian = BondAlternatingHeisenbergHamiltonian(num_qubits=4)
         _, low_ratio_state = hamiltonian.ground_state(0.4)

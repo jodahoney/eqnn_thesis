@@ -71,6 +71,7 @@ class BaselineQCNN(SU2QCNN):
         self._pooling_slices = self._build_pooling_slices()
         self._readout_slice = self._build_readout_slice()
         self.parameters = self._initialize_parameters(parameters)
+        self.classification_threshold = 0.5
 
 
 __all__ = ["BaselineQCNN", "BaselineQCNNConfig", "QCNNForwardPass"]

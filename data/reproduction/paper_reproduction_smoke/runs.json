@@ -1,0 +1,10 @@
+[
+  {
+    "classification_threshold": 0.9028827684363014,
+    "output_dir": "/Users/joda/Desktop/stanford/eqnn_thesis/data/reproduction/paper_reproduction_smoke/experiments/train_size_2/seed_0",
+    "seed": 0,
+    "test_accuracy": 1.0,
+    "test_loss": 0.33790407168671893,
+    "train_size": 2
+  }
+]

@@ -75,3 +75,18 @@ class ExactGradientTests(unittest.TestCase):
         finite_difference_gradient = finite_difference_trainer.gradient(model, dataset)
 
         np.testing.assert_allclose(exact_gradient, finite_difference_gradient, atol=1e-5)
+
+    def test_su2_swap_mse_exact_gradient_matches_finite_difference(self) -> None:
+        dataset = self._combined_dataset(num_qubits=4, num_points=5, split_seed=4)
+        parameters = np.asarray((0.09, -0.03, 0.14), dtype=np.float64)
+        model = SU2QCNN(QCNNConfig(num_qubits=4), parameters=parameters)
+
+        exact_trainer = Trainer(TrainingConfig(loss="mse", gradient_backend="exact"))
+        finite_difference_trainer = Trainer(
+            TrainingConfig(loss="mse", gradient_backend="finite_difference")
+        )
+
+        exact_gradient = exact_trainer.gradient(model, dataset)
+        finite_difference_gradient = finite_difference_trainer.gradient(model, dataset)
+
+        np.testing.assert_allclose(exact_gradient, finite_difference_gradient, atol=1e-5)

@@ -13,6 +13,8 @@ from eqnn.datasets.heisenberg import DatasetBundle, DatasetSplit
 class TrainingConfig:
     epochs: int = 50
     learning_rate: float = 5e-2
+    loss: str = "bce"
+    batch_size: int | None = None
     finite_difference_eps: float = 1e-3
     gradient_backend: str = "auto"
     optimizer: str = "adam"
@@ -24,12 +26,19 @@ class TrainingConfig:
     initialization_noise_scale: float = 5e-2
     num_restarts: int = 1
     random_seed: int | None = None
+    classification_threshold: float = 0.5
+    threshold_update: str = "none"
+    threshold_critical_ratio: float = 1.0
 
     def __post_init__(self) -> None:
         if self.epochs < 1:
             raise ValueError("epochs must be at least 1")
         if self.learning_rate <= 0.0:
             raise ValueError("learning_rate must be positive")
+        if self.loss not in {"bce", "mse"}:
+            raise ValueError("loss must be 'bce' or 'mse'")
+        if self.batch_size is not None and self.batch_size < 1:
+            raise ValueError("batch_size must be positive when provided")
         if self.finite_difference_eps <= 0.0:
             raise ValueError("finite_difference_eps must be positive")
         if self.gradient_backend not in {"auto", "exact", "finite_difference"}:
@@ -44,6 +53,12 @@ class TrainingConfig:
             raise ValueError("initialization_noise_scale must be non-negative")
         if self.num_restarts < 1:
             raise ValueError("num_restarts must be at least 1")
+        if not 0.0 <= self.classification_threshold <= 1.0:
+            raise ValueError("classification_threshold must lie in [0, 1]")
+        if self.threshold_update not in {"none", "paper_nearest_critical"}:
+            raise ValueError(
+                "threshold_update must be 'none' or 'paper_nearest_critical'"
+            )
 
 
 class Trainer:
@@ -64,7 +79,8 @@ class Trainer:
         for restart_index in range(self.config.num_restarts):
             initial_parameters = self._initialize_parameters(base_parameters, rng)
             model.set_parameters(initial_parameters)
-            history = self._fit_once(model, split, initial_parameters)
+            self._initialize_model_threshold(model)
+            history = self._fit_once(model, split, initial_parameters, rng)
             restart_histories.append(history)
 
             if best_history is None or float(history["best_loss"]) < float(best_history["best_loss"]):
@@ -75,6 +91,8 @@ class Trainer:
 
         if self.config.restore_best:
             model.set_parameters(np.asarray(best_history["best_parameters"], dtype=np.float64))
+            if hasattr(model, "set_classification_threshold"):
+                model.set_classification_threshold(float(best_history["best_threshold"]))
 
         result = dict(best_history)
         result["best_restart"] = best_restart
@@ -89,10 +107,16 @@ class Trainer:
         parameters: np.ndarray | None = None,
     ) -> dict[str, float]:
         probabilities = model.predict_batch(dataset.states, parameters=parameters)
-        predictions = (probabilities >= 0.5).astype(np.int64)
+        if hasattr(model, "predict_labels_batch"):
+            predictions = np.asarray(
+                model.predict_labels_batch(dataset.states, parameters=parameters),
+                dtype=np.int64,
+            )
+        else:
+            predictions = (probabilities >= self.config.classification_threshold).astype(np.int64)
         labels = dataset.labels.astype(np.int64)
         accuracy = float(np.mean(predictions == labels))
-        loss = model.binary_cross_entropy(dataset.states, dataset.labels, parameters=parameters)
+        loss = self._objective_loss(model, dataset.states, dataset.labels, parameters)
         return {"loss": float(loss), "accuracy": accuracy}
 
     def gradient(
@@ -130,50 +154,63 @@ class Trainer:
         model: object,
         split: DatasetSplit,
         initial_parameters: np.ndarray,
+        rng: np.random.Generator,
     ) -> dict[str, object]:
         states = split.states
         labels = np.asarray(split.labels, dtype=np.float64)
         parameters = np.asarray(initial_parameters, dtype=np.float64).copy()
 
         first_metrics = self.evaluate(model, split, parameters=parameters)
+        current_threshold = self._current_threshold(model)
 
         history: dict[str, object] = {
             "loss": [first_metrics["loss"]],
             "accuracy": [first_metrics["accuracy"]],
+            "threshold": [current_threshold],
             "best_loss": first_metrics["loss"],
             "best_accuracy": first_metrics["accuracy"],
             "best_parameters": parameters.copy(),
+            "best_threshold": current_threshold,
             "initial_parameters": parameters.copy(),
         }
 
         first_moment = np.zeros_like(parameters)
         second_moment = np.zeros_like(parameters)
+        optimization_step = 0
 
         for epoch in range(1, self.config.epochs + 1):
-            gradient = self._loss_gradient(model, states, labels, parameters)
+            for batch_indices in self._iter_minibatch_indices(labels.shape[0], rng):
+                batch_states = states[batch_indices]
+                batch_labels = labels[batch_indices]
+                gradient = self._loss_gradient(model, batch_states, batch_labels, parameters)
+                optimization_step += 1
 
-            if self.config.optimizer == "adam":
-                first_moment = self.config.beta1 * first_moment + (1.0 - self.config.beta1) * gradient
-                second_moment = self.config.beta2 * second_moment + (1.0 - self.config.beta2) * (gradient**2)
-                first_unbiased = first_moment / (1.0 - self.config.beta1**epoch)
-                second_unbiased = second_moment / (1.0 - self.config.beta2**epoch)
-                parameters = parameters - self.config.learning_rate * first_unbiased / (
-                    np.sqrt(second_unbiased) + self.config.epsilon
-                )
-            else:
-                parameters = parameters - self.config.learning_rate * gradient
+                if self.config.optimizer == "adam":
+                    first_moment = self.config.beta1 * first_moment + (1.0 - self.config.beta1) * gradient
+                    second_moment = self.config.beta2 * second_moment + (1.0 - self.config.beta2) * (gradient**2)
+                    first_unbiased = first_moment / (1.0 - self.config.beta1**optimization_step)
+                    second_unbiased = second_moment / (1.0 - self.config.beta2**optimization_step)
+                    parameters = parameters - self.config.learning_rate * first_unbiased / (
+                        np.sqrt(second_unbiased) + self.config.epsilon
+                    )
+                else:
+                    parameters = parameters - self.config.learning_rate * gradient
 
             model.set_parameters(parameters)
+            self._maybe_update_classification_threshold(model, split, parameters)
             metrics = self.evaluate(model, split, parameters=parameters)
             history["loss"].append(metrics["loss"])
             history["accuracy"].append(metrics["accuracy"])
+            history["threshold"].append(self._current_threshold(model))
 
             if metrics["loss"] < history["best_loss"]:
                 history["best_loss"] = metrics["loss"]
                 history["best_accuracy"] = metrics["accuracy"]
                 history["best_parameters"] = parameters.copy()
+                history["best_threshold"] = self._current_threshold(model)
 
         history["final_parameters"] = parameters.copy()
+        history["final_threshold"] = self._current_threshold(model)
         return history
 
     def _loss_gradient(
@@ -185,6 +222,19 @@ class Trainer:
     ) -> np.ndarray:
         if self.config.gradient_backend in {"auto", "exact"} and hasattr(model, "loss_gradient"):
             try:
+                return np.asarray(
+                    model.loss_gradient(
+                        states,
+                        labels,
+                        parameters=parameters,
+                        finite_difference_eps=self.config.finite_difference_eps,
+                        loss_name=self.config.loss,
+                    ),
+                    dtype=np.float64,
+                )
+            except TypeError:
+                if self.config.loss != "bce":
+                    raise
                 return np.asarray(
                     model.loss_gradient(
                         states,
@@ -215,8 +265,82 @@ class Trainer:
         for index in range(parameters.size):
             offset = np.zeros_like(parameters)
             offset[index] = self.config.finite_difference_eps
-            loss_plus = model.binary_cross_entropy(states, labels, parameters=parameters + offset)
-            loss_minus = model.binary_cross_entropy(states, labels, parameters=parameters - offset)
+            loss_plus = self._objective_loss(model, states, labels, parameters + offset)
+            loss_minus = self._objective_loss(model, states, labels, parameters - offset)
             gradient[index] = (loss_plus - loss_minus) / (2.0 * self.config.finite_difference_eps)
 
         return gradient
+
+    def _objective_loss(
+        self,
+        model: object,
+        states: np.ndarray,
+        labels: np.ndarray,
+        parameters: np.ndarray,
+    ) -> float:
+        if hasattr(model, "loss"):
+            try:
+                return float(model.loss(states, labels, parameters=parameters, loss_name=self.config.loss))
+            except TypeError:
+                if self.config.loss != "bce":
+                    raise
+                return float(model.loss(states, labels, parameters=parameters))
+
+        probabilities = np.asarray(model.predict_batch(states, parameters=parameters), dtype=np.float64)
+        labels_array = np.asarray(labels, dtype=np.float64)
+        if self.config.loss == "mse":
+            return float(np.mean((probabilities - labels_array) ** 2))
+        return float(model.binary_cross_entropy(states, labels_array, parameters=parameters))
+
+    def _iter_minibatch_indices(
+        self,
+        num_examples: int,
+        rng: np.random.Generator,
+    ) -> list[np.ndarray]:
+        if self.config.batch_size is None or self.config.batch_size >= num_examples:
+            return [np.arange(num_examples, dtype=np.int64)]
+
+        indices = np.arange(num_examples, dtype=np.int64)
+        rng.shuffle(indices)
+        return [
+            indices[start : start + int(self.config.batch_size)]
+            for start in range(0, num_examples, int(self.config.batch_size))
+        ]
+
+    def _initialize_model_threshold(self, model: object) -> None:
+        if hasattr(model, "set_classification_threshold"):
+            model.set_classification_threshold(self.config.classification_threshold)
+
+    def _current_threshold(self, model: object) -> float:
+        if hasattr(model, "get_classification_threshold"):
+            return float(model.get_classification_threshold())
+        return float(self.config.classification_threshold)
+
+    def _maybe_update_classification_threshold(
+        self,
+        model: object,
+        split: DatasetSplit,
+        parameters: np.ndarray,
+    ) -> None:
+        if self.config.threshold_update == "none" or not hasattr(model, "set_classification_threshold"):
+            return
+
+        distances = np.abs(split.coupling_ratios - self.config.threshold_critical_ratio)
+        left_indices = np.flatnonzero(split.coupling_ratios < self.config.threshold_critical_ratio)
+        right_indices = np.flatnonzero(split.coupling_ratios > self.config.threshold_critical_ratio)
+
+        selected: list[int] = []
+        if left_indices.size > 0:
+            selected.append(int(left_indices[np.argmin(distances[left_indices])]))
+        if right_indices.size > 0:
+            selected.append(int(right_indices[np.argmin(distances[right_indices])]))
+        if len(selected) < 2:
+            selected = np.argsort(distances).tolist()[: min(2, split.coupling_ratios.size)]
+        if not selected:
+            return
+
+        outputs = np.asarray(
+            model.predict_batch(split.states[np.asarray(selected, dtype=np.int64)], parameters=parameters),
+            dtype=np.float64,
+        )
+        model.set_classification_threshold(float(np.mean(outputs)))

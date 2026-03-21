@@ -116,6 +116,16 @@ def run_training_experiment(
     test_metrics = trainer.evaluate(model, dataset.test)
     train_probabilities = model.predict_batch(dataset.train.states)
     test_probabilities = model.predict_batch(dataset.test.states)
+    train_predicted_labels = (
+        model.predict_labels_batch(dataset.train.states)
+        if hasattr(model, "predict_labels_batch")
+        else (train_probabilities >= 0.5).astype(np.int64)
+    )
+    test_predicted_labels = (
+        model.predict_labels_batch(dataset.test.states)
+        if hasattr(model, "predict_labels_batch")
+        else (test_probabilities >= 0.5).astype(np.int64)
+    )
 
     result = {
         "experiment_name": experiment_name or _default_experiment_name(experiment_config),
@@ -123,6 +133,11 @@ def run_training_experiment(
         "training_config": asdict(training_config),
         "dataset_metadata": dataset.metadata,
         "parameter_count": int(model.parameter_count),
+        "classification_threshold": (
+            float(model.get_classification_threshold())
+            if hasattr(model, "get_classification_threshold")
+            else 0.5
+        ),
         "train_metrics": train_metrics,
         "test_metrics": test_metrics,
         "history": _serialize_for_json(history),
@@ -138,6 +153,8 @@ def run_training_experiment(
             model=model,
             train_probabilities=train_probabilities,
             test_probabilities=test_probabilities,
+            train_predicted_labels=train_predicted_labels,
+            test_predicted_labels=test_predicted_labels,
         )
         result["output_dir"] = str(output_path.resolve())
 
@@ -243,6 +260,8 @@ def _save_experiment_artifacts(
     model: object,
     train_probabilities: np.ndarray,
     test_probabilities: np.ndarray,
+    train_predicted_labels: np.ndarray,
+    test_predicted_labels: np.ndarray,
 ) -> None:
     (output_path / "metrics.json").write_text(
         json.dumps(_serialize_for_json(result), indent=2, sort_keys=True) + "\n"
@@ -251,12 +270,14 @@ def _save_experiment_artifacts(
     np.savez_compressed(
         output_path / "train_predictions.npz",
         probabilities=np.asarray(train_probabilities, dtype=np.float64),
+        predicted_labels=np.asarray(train_predicted_labels, dtype=np.int64),
         labels=dataset.train.labels,
         coupling_ratios=dataset.train.coupling_ratios,
     )
     np.savez_compressed(
         output_path / "test_predictions.npz",
         probabilities=np.asarray(test_probabilities, dtype=np.float64),
+        predicted_labels=np.asarray(test_predicted_labels, dtype=np.int64),
         labels=dataset.test.labels,
         coupling_ratios=dataset.test.coupling_ratios,
     )
