@@ -12,23 +12,32 @@ from eqnn.datasets.heisenberg import DatasetBundle, DatasetSplit
 
 def save_dataset_split(split: DatasetSplit, output_path: str | Path) -> None:
     output_path = Path(output_path)
-    np.savez_compressed(
-        output_path,
-        states=split.states,
-        labels=split.labels,
-        coupling_ratios=split.coupling_ratios,
-        ground_state_energies=split.ground_state_energies,
-    )
+    arrays: dict[str, np.ndarray] = {
+        "states": split.states,
+        "labels": split.labels,
+        "coupling_ratios": split.coupling_ratios,
+        "ground_state_energies": split.ground_state_energies,
+    }
+    if split.diagnostics is not None:
+        for name, values in split.diagnostics.items():
+            arrays[f"diagnostic__{name}"] = values
+    np.savez_compressed(output_path, **arrays)
 
 
 def load_dataset_split(input_path: str | Path) -> DatasetSplit:
     input_path = Path(input_path)
     with np.load(input_path, allow_pickle=False) as data:
+        diagnostics = {
+            key.removeprefix("diagnostic__"): data[key]
+            for key in data.files
+            if key.startswith("diagnostic__")
+        }
         return DatasetSplit(
             states=data["states"],
             labels=data["labels"],
             coupling_ratios=data["coupling_ratios"],
             ground_state_energies=data["ground_state_energies"],
+            diagnostics=diagnostics if diagnostics else None,
         )
 
 

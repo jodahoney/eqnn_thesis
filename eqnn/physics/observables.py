@@ -13,6 +13,15 @@ SINGLET_STATE = np.array(
     dtype=np.complex128,
 )
 SINGLET_PROJECTOR = np.outer(SINGLET_STATE, np.conjugate(SINGLET_STATE))
+SWAP_OPERATOR = np.array(
+    [
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ],
+    dtype=np.complex128,
+)
 
 
 def singlet_fraction(
@@ -57,3 +66,17 @@ def dimerization_feature(
         boundary=boundary,
     )
     return secondary_mean - primary_mean
+
+
+def swap_expectation(density_matrix: ComplexArray) -> float:
+    """Return <SWAP> on a two-qubit density matrix."""
+
+    if density_matrix.shape != (4, 4):
+        raise ValueError("swap_expectation expects a two-qubit density matrix with shape (4, 4)")
+    return expectation_value(density_matrix, SWAP_OPERATOR)
+
+
+def swap_probability(density_matrix: ComplexArray) -> float:
+    """Return the paper-style QCNN readout f = (<SWAP> + 1) / 2."""
+
+    return 0.5 * (swap_expectation(density_matrix) + 1.0)

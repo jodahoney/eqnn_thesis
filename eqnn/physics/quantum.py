@@ -86,3 +86,89 @@ def expectation_value(density_matrix: ComplexArray, operator: ComplexArray) -> f
 
     value = np.trace(density_matrix @ operator)
     return float(np.real_if_close(value))
+
+
+def qubit_permutation_operator(
+    num_qubits: int,
+    permutation: Iterable[int],
+) -> ComplexArray:
+    """Return the basis permutation that reorders qubits.
+
+    The returned operator maps
+
+        |b_0 ... b_{n-1}> -> |b_{permutation[0]} ... b_{permutation[n-1]}>.
+    """
+
+    permutation_tuple = tuple(int(index) for index in permutation)
+    if num_qubits < 1:
+        raise ValueError("num_qubits must be at least 1")
+    if sorted(permutation_tuple) != list(range(num_qubits)):
+        raise ValueError("permutation must be a rearrangement of range(num_qubits)")
+
+    dimension = 1 << num_qubits
+    operator = np.zeros((dimension, dimension), dtype=np.complex128)
+    for input_index in range(dimension):
+        input_bits = _index_to_bits(input_index, num_qubits)
+        output_bits = [input_bits[site] for site in permutation_tuple]
+        output_index = _bits_to_index(output_bits)
+        operator[output_index, input_index] = 1.0
+    return operator
+
+
+def embed_operator_on_sites(
+    operator: ComplexArray,
+    num_qubits: int,
+    sites: Iterable[int],
+) -> ComplexArray:
+    """Embed a k-qubit operator on selected sites of an n-qubit Hilbert space."""
+
+    site_tuple = tuple(sorted(set(int(site) for site in sites)))
+    if not site_tuple:
+        raise ValueError("At least one site is required")
+    if num_qubits < len(site_tuple):
+        raise ValueError("num_qubits must be at least the number of embedded sites")
+    for site in site_tuple:
+        if site < 0 or site >= num_qubits:
+            raise ValueError(f"site index {site} is out of range for {num_qubits} qubits")
+
+    local_dimension = 1 << len(site_tuple)
+    if operator.shape != (local_dimension, local_dimension):
+        raise ValueError(
+            "operator shape does not match the number of requested sites: "
+            f"expected {(local_dimension, local_dimension)}, got {operator.shape}"
+        )
+
+    remainder_sites = tuple(site for site in range(num_qubits) if site not in site_tuple)
+    permutation = site_tuple + remainder_sites
+    permutation_operator = qubit_permutation_operator(num_qubits, permutation)
+    embedded_front = np.kron(
+        np.asarray(operator, dtype=np.complex128),
+        np.eye(1 << len(remainder_sites), dtype=np.complex128),
+    )
+    return np.asarray(
+        permutation_operator.conjugate().T @ embedded_front @ permutation_operator,
+        dtype=np.complex128,
+    )
+
+
+def partial_trace_adjoint(
+    reduced_operator: ComplexArray,
+    num_qubits: int,
+    traced_out_sites: Iterable[int],
+) -> ComplexArray:
+    """Return the adjoint map of partial trace acting on an observable."""
+
+    traced_out = tuple(sorted(set(int(site) for site in traced_out_sites)))
+    kept_sites = tuple(site for site in range(num_qubits) if site not in traced_out)
+    return embed_operator_on_sites(reduced_operator, num_qubits, kept_sites)
+
+
+def _index_to_bits(index: int, num_qubits: int) -> list[int]:
+    return [int((index >> (num_qubits - 1 - site)) & 1) for site in range(num_qubits)]
+
+
+def _bits_to_index(bits: Iterable[int]) -> int:
+    value = 0
+    for bit in bits:
+        value = (value << 1) | int(bit)
+    return value

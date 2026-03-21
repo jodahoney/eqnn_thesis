@@ -156,3 +156,30 @@ class SU2EquivariantPoolingTests(unittest.TestCase):
         )
         summary = pooling_equivariance_error(pooling, num_trials=5, seed=17)
         self.assertLess(summary["max_error"], 1e-10)
+
+    def test_equivariant_pooling_parameter_gradient_matches_finite_difference(self) -> None:
+        state = random_complex_statevector(num_qubits=4, seed=31)
+        density_matrix = np.outer(state, np.conjugate(state))
+        pooling = SU2EquivariantPooling(
+            SU2EquivariantPoolingConfig(num_qubits=4),
+            parameters=(0.2, -0.3, 0.1),
+        )
+        rng = np.random.default_rng(7)
+        random_matrix = rng.normal(size=(4, 4)) + 1.0j * rng.normal(size=(4, 4))
+        observable = random_matrix + random_matrix.conjugate().T
+
+        exact_gradient = pooling.parameter_gradient(density_matrix, observable)
+
+        eps = 1e-6
+        finite_difference_gradient = np.zeros(pooling.parameter_count, dtype=np.float64)
+        base_parameters = pooling.get_parameters()
+        for index in range(pooling.parameter_count):
+            offset = np.zeros(pooling.parameter_count, dtype=np.float64)
+            offset[index] = eps
+            output_plus = pooling.apply(density_matrix, parameters=base_parameters + offset)
+            output_minus = pooling.apply(density_matrix, parameters=base_parameters - offset)
+            value_plus = float(np.real_if_close(np.trace(observable @ output_plus)))
+            value_minus = float(np.real_if_close(np.trace(observable @ output_minus)))
+            finite_difference_gradient[index] = (value_plus - value_minus) / (2.0 * eps)
+
+        np.testing.assert_allclose(exact_gradient, finite_difference_gradient, atol=1e-5)

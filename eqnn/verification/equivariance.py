@@ -38,6 +38,22 @@ def convolution_equivariance_error(layer: object, num_trials: int = 10, seed: in
     return _summarize_errors(errors)
 
 
+def convolution_operator_equivariance_error(
+    layer: object,
+    num_trials: int = 10,
+    seed: int = 0,
+) -> dict[str, float]:
+    """Check equivariance at the operator level via commutators."""
+
+    unitary = layer.unitary()
+    errors = []
+    for trial in range(num_trials):
+        rotation = random_su2_rotation(layer.config.num_qubits, seed + 15_000 + trial)
+        commutator = unitary @ rotation - rotation @ unitary
+        errors.append(float(np.linalg.norm(commutator)))
+    return _summarize_errors(errors)
+
+
 def pooling_equivariance_error(layer: object, num_trials: int = 10, seed: int = 0) -> dict[str, float]:
     """Check that pooling is equivariant under the global SU(2) action."""
 

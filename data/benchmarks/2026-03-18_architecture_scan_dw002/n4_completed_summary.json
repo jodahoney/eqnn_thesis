@@ -1,0 +1,82 @@
+[
+  {
+    "model_family": "baseline_qcnn",
+    "pooling_mode": "partial_trace",
+    "readout_mode": "swap",
+    "mean_test_accuracy": 1.0,
+    "mean_test_loss": 0.55688000459761,
+    "mean_train_accuracy": 1.0,
+    "mean_train_loss": 0.5237689972319002,
+    "num_runs": 3
+  },
+  {
+    "model_family": "baseline_qcnn",
+    "pooling_mode": "equivariant",
+    "readout_mode": "swap",
+    "mean_test_accuracy": 1.0,
+    "mean_test_loss": 0.5572901440566116,
+    "mean_train_accuracy": 1.0,
+    "mean_train_loss": 0.5243896328888197,
+    "num_runs": 3
+  },
+  {
+    "model_family": "su2_qcnn",
+    "pooling_mode": "partial_trace",
+    "readout_mode": "swap",
+    "mean_test_accuracy": 1.0,
+    "mean_test_loss": 0.5581780109270952,
+    "mean_train_accuracy": 0.9583333333333334,
+    "mean_train_loss": 0.5255700942121375,
+    "num_runs": 3
+  },
+  {
+    "model_family": "baseline_qcnn",
+    "pooling_mode": "equivariant",
+    "readout_mode": "dimerization",
+    "mean_test_accuracy": 1.0,
+    "mean_test_loss": 0.5962381969514282,
+    "mean_train_accuracy": 1.0,
+    "mean_train_loss": 0.5717492267429186,
+    "num_runs": 3
+  },
+  {
+    "model_family": "baseline_qcnn",
+    "pooling_mode": "partial_trace",
+    "readout_mode": "dimerization",
+    "mean_test_accuracy": 1.0,
+    "mean_test_loss": 0.5962381969514284,
+    "mean_train_accuracy": 1.0,
+    "mean_train_loss": 0.5717492267429186,
+    "num_runs": 3
+  },
+  {
+    "model_family": "su2_qcnn",
+    "pooling_mode": "partial_trace",
+    "readout_mode": "dimerization",
+    "mean_test_accuracy": 1.0,
+    "mean_test_loss": 0.596932778189744,
+    "mean_train_accuracy": 1.0,
+    "mean_train_loss": 0.5726228378607922,
+    "num_runs": 3
+  },
+  {
+    "model_family": "su2_qcnn",
+    "pooling_mode": "equivariant",
+    "readout_mode": "dimerization",
+    "mean_test_accuracy": 1.0,
+    "mean_test_loss": 0.596932778189744,
+    "mean_train_accuracy": 1.0,
+    "mean_train_loss": 0.5726228378607923,
+    "num_runs": 3
+  },
+  {
+    "model_family": "su2_qcnn",
+    "pooling_mode": "equivariant",
+    "readout_mode": "swap",
+    "mean_test_accuracy": 0.8333333333333334,
+    "mean_test_loss": 0.5617931973858276,
+    "mean_train_accuracy": 0.9166666666666666,
+    "mean_train_loss": 0.5245373714350561,
+    "num_runs": 3
+  }
+]

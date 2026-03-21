@@ -3,6 +3,7 @@
 from eqnn.verification.equivariance import (
     check_global_su2_equivariance,
     convolution_equivariance_error,
+    convolution_operator_equivariance_error,
     model_invariance_error,
     pooling_equivariance_error,
 )
@@ -10,6 +11,7 @@ from eqnn.verification.equivariance import (
 __all__ = [
     "check_global_su2_equivariance",
     "convolution_equivariance_error",
+    "convolution_operator_equivariance_error",
     "model_invariance_error",
     "pooling_equivariance_error",
 ]
