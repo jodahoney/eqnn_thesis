@@ -190,6 +190,39 @@ python3 -m eqnn run-paper-reproduction \
 
 This writes per-seed experiment artifacts, per-train-size phase-diagram summaries, and aggregate `summary.json` / `summary.csv`.
 
+## Run on Sherlock
+
+For a Stanford Sherlock Slurm launch, the repo now includes
+[`scripts/sherlock_paper_reproduction.sbatch`](/Users/joda/Desktop/stanford/eqnn_thesis/scripts/sherlock_paper_reproduction.sbatch).
+It runs one paper-reproduction job per system size through a job array, with
+the array index mapped to `--num-qubits`.
+
+From the repo root on Sherlock:
+
+```bash
+sbatch scripts/sherlock_paper_reproduction.sbatch
+```
+
+That submits array tasks for `N = 6, ..., 13` and writes per-task Slurm logs to
+`logs/slurm/`.
+
+Useful overrides:
+
+```bash
+MODULE_PYTHON=python/3.11.9 VENV_DIR="$HOME/venvs/eqnn" \
+sbatch --array=6-8 scripts/sherlock_paper_reproduction.sbatch
+```
+
+```bash
+INSTALL_EDITABLE=1 OUTPUT_ROOT="$PWD/data/reproduction/sherlock_test" \
+sbatch --array=6 scripts/sherlock_paper_reproduction.sbatch
+```
+
+The script also respects `TRAIN_SIZES`, `RANDOM_SEEDS`, `EPOCHS`,
+`LEARNING_RATE`, `GRADIENT_BACKEND`, `INITIALIZATION_STRATEGY`,
+`INITIALIZATION_NOISE_SCALE`, and `EIGENSOLVER` if you want to override the
+defaults without editing the file.
+
 ## Run the tests
 
 ```bash
