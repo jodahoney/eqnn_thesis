@@ -104,7 +104,9 @@ import eqnn
 print("eqnn import ok")
 PY
 
-srun "$PYTHON_BIN" -m eqnn run-paper-reproduction \
+echo "[$(date)] Launching reproduction for N=$NUM_QUBITS"
+
+"$PYTHON_BIN" -m eqnn run-paper-reproduction \
   --num-qubits "$NUM_QUBITS" \
   --train-sizes $TRAIN_SIZES \
   --random-seeds $RANDOM_SEEDS \
