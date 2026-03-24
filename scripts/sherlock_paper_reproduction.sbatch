@@ -3,28 +3,35 @@
 #SBATCH --partition=normal
 #SBATCH --time=24:00:00
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=16G
+#SBATCH --mem=32G
 #SBATCH --array=6-13
-#SBATCH --output=logs/slurm/eqnn-paper-%A_%a.out
-#SBATCH --error=logs/slurm/eqnn-paper-%A_%a.err
+#SBATCH --output=/scratch/users/jdehoney/eqnn_thesis/logs/slurm/%x_%A_%a.out
+#SBATCH --error=/scratch/users/jdehoney/eqnn_thesis/logs/slurm/%x_%A_%a.err
 
 set -euo pipefail
 
 # Usage:
+#   mkdir -p /scratch/users/jdehoney/eqnn_thesis/logs/slurm
+#   cd /scratch/users/jdehoney/eqnn_thesis
 #   sbatch scripts/sherlock_paper_reproduction.sbatch
 #
 # Common overrides:
-#   MODULE_PYTHON=python/3.11.9 sbatch --array=6-8 scripts/sherlock_paper_reproduction.sbatch
+#   PROJ=/scratch/users/jdehoney/eqnn_thesis \
+#   MODULE_PYTHON=python/3.11.9 \
+#   sbatch --array=6-8 scripts/sherlock_paper_reproduction.sbatch
 #   VENV_DIR="$HOME/venvs/eqnn" sbatch scripts/sherlock_paper_reproduction.sbatch
-#   INSTALL_EDITABLE=1 sbatch scripts/sherlock_paper_reproduction.sbatch
 #
 # Assumptions:
 # - The repo is already checked out on Sherlock.
-# - Dependencies are available either through a loaded module + venv,
-#   or by setting INSTALL_EDITABLE=1 for a per-job editable install.
+# - Python and dependencies are available through a loaded module and/or venv.
+# - This script is intended to run from the repo checkout itself; no editable
+#   install is required because `python -m eqnn` is executed from the repo root.
 
-PROJECT_ROOT="${PROJECT_ROOT:-$SLURM_SUBMIT_DIR}"
+PROJ="${PROJ:-/scratch/users/jdehoney/eqnn_thesis}"
+PROJECT_ROOT="${PROJECT_ROOT:-$PROJ}"
+MODULE_PYTHON="${MODULE_PYTHON:-python/3.11.9}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
+VENV_DIR="${VENV_DIR:-}"
 TRAIN_SIZES="${TRAIN_SIZES:-2 4 6 8 10 12}"
 RANDOM_SEEDS="${RANDOM_SEEDS:-0 1 2}"
 EPOCHS="${EPOCHS:-750}"
@@ -34,23 +41,21 @@ INITIALIZATION_STRATEGY="${INITIALIZATION_STRATEGY:-noisy_current}"
 INITIALIZATION_NOISE_SCALE="${INITIALIZATION_NOISE_SCALE:-0.05}"
 EIGENSOLVER="${EIGENSOLVER:-auto}"
 NUM_QUBITS="${NUM_QUBITS:-${SLURM_ARRAY_TASK_ID:?SLURM_ARRAY_TASK_ID is required}}"
-OUTPUT_ROOT="${OUTPUT_ROOT:-$PROJECT_ROOT/data/reproduction/sherlock}"
+RUN_ID="${RUN_ID:-paper_reproduction_${SLURM_ARRAY_JOB_ID:-${SLURM_JOB_ID:-manual}}}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-$PROJECT_ROOT/data/reproduction/$RUN_ID}"
 RUN_OUTPUT_DIR="${RUN_OUTPUT_DIR:-$OUTPUT_ROOT/paper_reproduction_n${NUM_QUBITS}}"
 
 mkdir -p "$PROJECT_ROOT/logs/slurm" "$OUTPUT_ROOT"
 cd "$PROJECT_ROOT"
 
-if [[ -n "${MODULE_PYTHON:-}" ]]; then
+if command -v module >/dev/null 2>&1; then
+  module purge
   module load "$MODULE_PYTHON"
 fi
 
 if [[ -n "${VENV_DIR:-}" ]]; then
   # shellcheck disable=SC1090
   source "$VENV_DIR/bin/activate"
-fi
-
-if [[ "${INSTALL_EDITABLE:-0}" == "1" ]]; then
-  "$PYTHON_BIN" -m pip install -e "$PROJECT_ROOT"
 fi
 
 # Keep BLAS/OpenMP from oversubscribing the allocated cores.
