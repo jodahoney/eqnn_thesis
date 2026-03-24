@@ -197,24 +197,28 @@ For a Stanford Sherlock Slurm launch, the repo now includes
 It runs one paper-reproduction job per system size through a job array, with
 the array index mapped to `--num-qubits`.
 
-From the repo root on Sherlock:
+With the repo checked out at `/scratch/users/jdehoney/eqnn_thesis`:
 
 ```bash
+mkdir -p /scratch/users/jdehoney/eqnn_thesis/logs/slurm
+cd /scratch/users/jdehoney/eqnn_thesis
 sbatch scripts/sherlock_paper_reproduction.sbatch
 ```
 
 That submits array tasks for `N = 6, ..., 13` and writes per-task Slurm logs to
-`logs/slurm/`.
+`/scratch/users/jdehoney/eqnn_thesis/logs/slurm/`.
 
 Useful overrides:
 
 ```bash
+cd /scratch/users/jdehoney/eqnn_thesis
 MODULE_PYTHON=python/3.11.9 VENV_DIR="$HOME/venvs/eqnn" \
 sbatch --array=6-8 scripts/sherlock_paper_reproduction.sbatch
 ```
 
 ```bash
-INSTALL_EDITABLE=1 OUTPUT_ROOT="$PWD/data/reproduction/sherlock_test" \
+cd /scratch/users/jdehoney/eqnn_thesis
+RUN_ID=paper_reproduction_smoke OUTPUT_ROOT="$PWD/data/reproduction/sherlock_test" \
 sbatch --array=6 scripts/sherlock_paper_reproduction.sbatch
 ```
 
