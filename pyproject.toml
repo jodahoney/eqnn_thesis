@@ -7,10 +7,10 @@ name = "eqnn-simulator"
 version = "0.1.0"
 description = "EQNN simulator scaffold with a bond-alternating Heisenberg dataset generator."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.13"
 dependencies = [
-  "numpy>=1.26",
-  "scipy>=1.14",
+  "numpy>=1.26,<3",
+  "scipy>=1.14,<2",
 ]
 
 [project.scripts]
