@@ -1,0 +1,40 @@
+[Thu Mar 26 12:15:41 PDT 2026] Starting paper reproduction task
+Host: sh04-01n28.int
+Project root: /scratch/users/jdehoney/eqnn_thesis
+Working dir: /scratch/users/jdehoney/eqnn_thesis
+Python executable: /scratch/users/jdehoney/venvs/eqnn_py312/bin/python3
+Python version: Python 3.12.1
+SLURM array job: 19639640
+SLURM job: 19641822
+SLURM array task: 28
+SLURM_CPUS_PER_TASK=4
+SLURM_TRES_PER_TASK=cpu=4
+Decoded num qubits: 10
+Decoded train size: 10
+Seeds: 0 1 2
+Epochs: 750
+Learning rate: 0.05
+Gradient backend: exact
+Initialization strategy: noisy_current
+Initialization noise scale: 0.05
+Eigensolver: auto
+Output dir: /scratch/users/jdehoney/eqnn_thesis/data/reproduction/paper_reproduction_19639640/n10/train_size_10
+sys.executable = /scratch/users/jdehoney/venvs/eqnn_py312/bin/python
+numpy = 2.2.6
+scipy = 1.16.3
+eqnn import ok
+[Thu Mar 26 12:15:44 PDT 2026] Launching reproduction for N=10, train_size=10
+Completed 3 paper reproduction runs
+Summary written to /scratch/users/jdehoney/eqnn_thesis/data/reproduction/paper_reproduction_19639640/n10/train_size_10/summary.csv
+[Fri Mar 27 12:15:04 PDT 2026] Completed paper reproduction for N=10, train_size=10
+Contents of /scratch/users/jdehoney/eqnn_thesis/data/reproduction/paper_reproduction_19639640/n10/train_size_10:
+total 26K
+drwxr-xr-x 5 jdehoney kpohl 4.0K Mar 27 12:15 .
+drwxr-xr-x 6 jdehoney kpohl 4.0K Mar 26 12:15 ..
+drwxr-xr-x 3 jdehoney kpohl 4.0K Mar 26 12:15 datasets
+drwxr-xr-x 3 jdehoney kpohl 4.0K Mar 26 20:39 experiments
+-rw-r--r-- 1 jdehoney kpohl  385 Mar 26 12:15 paper_reproduction_config.json
+drwxr-xr-x 2 jdehoney kpohl 4.0K Mar 27 12:15 phase_diagrams
+-rw-r--r-- 1 jdehoney kpohl  949 Mar 27 12:15 runs.json
+-rw-r--r-- 1 jdehoney kpohl  556 Mar 27 12:15 summary.csv
+-rw-r--r-- 1 jdehoney kpohl  671 Mar 27 12:15 summary.json

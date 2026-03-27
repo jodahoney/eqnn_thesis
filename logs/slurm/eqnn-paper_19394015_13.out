@@ -1,0 +1,24 @@
+[Tue Mar 24 00:13:08 PDT 2026] Starting paper reproduction
+Host: sh03-08n37.int
+Project root: /scratch/users/jdehoney/eqnn_thesis
+Working dir: /scratch/users/jdehoney/eqnn_thesis
+Python executable: /scratch/users/jdehoney/venvs/eqnn_py312/bin/python3
+Python version: Python 3.12.1
+Num qubits: 13
+Train sizes: 2 4 6 8 10 12
+Random seeds: 0 1 2
+Epochs: 750
+Learning rate: 0.05
+Gradient backend: exact
+Initialization strategy: noisy_current
+Initialization noise scale: 0.05
+Eigensolver: auto
+Output dir: /scratch/users/jdehoney/eqnn_thesis/data/reproduction/paper_reproduction_19394015/paper_reproduction_n13
+SLURM job: 19394015
+SLURM array task: 13
+SLURM cpus-per-task: 5
+sys.executable = /scratch/users/jdehoney/venvs/eqnn_py312/bin/python
+numpy = 2.2.6
+scipy = 1.16.3
+eqnn import ok
+[Tue Mar 24 00:13:10 PDT 2026] Launching reproduction for N=13

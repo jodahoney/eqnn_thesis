@@ -1,0 +1,26 @@
+[
+  {
+    "classification_threshold": 0.5163372951862899,
+    "output_dir": "/scratch/users/jdehoney/eqnn_thesis/data/reproduction/paper_reproduction_19639640/n10/train_size_8/experiments/train_size_8/seed_0",
+    "seed": 0,
+    "test_accuracy": 1.0,
+    "test_loss": 0.12157341870046898,
+    "train_size": 8
+  },
+  {
+    "classification_threshold": 0.5862135327712096,
+    "output_dir": "/scratch/users/jdehoney/eqnn_thesis/data/reproduction/paper_reproduction_19639640/n10/train_size_8/experiments/train_size_8/seed_1",
+    "seed": 1,
+    "test_accuracy": 0.99,
+    "test_loss": 0.18346809371337258,
+    "train_size": 8
+  },
+  {
+    "classification_threshold": 0.517540456387473,
+    "output_dir": "/scratch/users/jdehoney/eqnn_thesis/data/reproduction/paper_reproduction_19639640/n10/train_size_8/experiments/train_size_8/seed_2",
+    "seed": 2,
+    "test_accuracy": 1.0,
+    "test_loss": 0.12157941666150657,
+    "train_size": 8
+  }
+]
