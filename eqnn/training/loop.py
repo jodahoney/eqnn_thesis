@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from eqnn.datasets.heisenberg import DatasetBundle, DatasetSplit
+from eqnn.utils.timing import RuntimeProfile, timed
 
 
 @dataclass(frozen=True)
@@ -67,7 +68,13 @@ class Trainer:
     def __init__(self, config: TrainingConfig) -> None:
         self.config = config
 
-    def fit(self, model: object, dataset: DatasetSplit | DatasetBundle) -> dict[str, object]:
+    def fit(
+        self,
+        model: object,
+        dataset: DatasetSplit | DatasetBundle,
+        *,
+        profile: RuntimeProfile | None = None,
+    ) -> dict[str, object]:
         split = self._coerce_split(dataset)
         base_parameters = model.get_parameters()
         rng = np.random.default_rng(self.config.random_seed)
@@ -80,7 +87,7 @@ class Trainer:
             initial_parameters = self._initialize_parameters(base_parameters, rng)
             model.set_parameters(initial_parameters)
             self._initialize_model_threshold(model)
-            history = self._fit_once(model, split, initial_parameters, rng)
+            history = self._fit_once(model, split, initial_parameters, rng, profile=profile)
             restart_histories.append(history)
 
             if best_history is None or float(history["best_loss"]) < float(best_history["best_loss"]):
@@ -105,18 +112,26 @@ class Trainer:
         dataset: DatasetSplit,
         *,
         parameters: np.ndarray | None = None,
+        profile: RuntimeProfile | None = None,
     ) -> dict[str, float]:
-        probabilities = model.predict_batch(dataset.states, parameters=parameters)
+        with timed(profile, "train.forward_predict"):
+            probabilities = model.predict_batch(dataset.states, parameters=parameters)
+
         if hasattr(model, "predict_labels_batch"):
-            predictions = np.asarray(
-                model.predict_labels_batch(dataset.states, parameters=parameters),
-                dtype=np.int64,
-            )
+            with timed(profile, "train.forward_predict_labels"):
+                predictions = np.asarray(
+                    model.predict_labels_batch(dataset.states, parameters=parameters),
+                    dtype=np.int64,
+                )
         else:
             predictions = (probabilities >= self.config.classification_threshold).astype(np.int64)
+
         labels = dataset.labels.astype(np.int64)
         accuracy = float(np.mean(predictions == labels))
-        loss = self._objective_loss(model, dataset.states, dataset.labels, parameters)
+
+        with timed(profile, "train.forward_loss"):
+            loss = self._objective_loss(model, dataset.states, dataset.labels, parameters)
+
         return {"loss": float(loss), "accuracy": accuracy}
 
     def gradient(
@@ -155,12 +170,16 @@ class Trainer:
         split: DatasetSplit,
         initial_parameters: np.ndarray,
         rng: np.random.Generator,
+        *,
+        profile: RuntimeProfile | None = None,
     ) -> dict[str, object]:
         states = split.states
         labels = np.asarray(split.labels, dtype=np.float64)
         parameters = np.asarray(initial_parameters, dtype=np.float64).copy()
 
-        first_metrics = self.evaluate(model, split, parameters=parameters)
+        with timed(profile, "train.initial_evaluate"):
+            first_metrics = self.evaluate(model, split, parameters=parameters)
+
         current_threshold = self._current_threshold(model)
 
         history: dict[str, object] = {
@@ -182,32 +201,43 @@ class Trainer:
             for batch_indices in self._iter_minibatch_indices(labels.shape[0], rng):
                 batch_states = states[batch_indices]
                 batch_labels = labels[batch_indices]
-                gradient = self._loss_gradient(model, batch_states, batch_labels, parameters)
+
+                with timed(profile, "train.backward_gradient"):
+                    gradient = self._loss_gradient(model, batch_states, batch_labels, parameters)
+
                 optimization_step += 1
 
-                if self.config.optimizer == "adam":
-                    first_moment = self.config.beta1 * first_moment + (1.0 - self.config.beta1) * gradient
-                    second_moment = self.config.beta2 * second_moment + (1.0 - self.config.beta2) * (gradient**2)
-                    first_unbiased = first_moment / (1.0 - self.config.beta1**optimization_step)
-                    second_unbiased = second_moment / (1.0 - self.config.beta2**optimization_step)
-                    parameters = parameters - self.config.learning_rate * first_unbiased / (
-                        np.sqrt(second_unbiased) + self.config.epsilon
-                    )
-                else:
-                    parameters = parameters - self.config.learning_rate * gradient
+                with timed(profile, "train.optimizer_step"):
+                    if self.config.optimizer == "adam":
+                        first_moment = self.config.beta1 * first_moment + (1.0 - self.config.beta1) * gradient
+                        second_moment = self.config.beta2 * second_moment + (1.0 - self.config.beta2) * (gradient**2)
 
-            model.set_parameters(parameters)
-            self._maybe_update_classification_threshold(model, split, parameters)
-            metrics = self.evaluate(model, split, parameters=parameters)
-            history["loss"].append(metrics["loss"])
-            history["accuracy"].append(metrics["accuracy"])
-            history["threshold"].append(self._current_threshold(model))
+                        first_unbiased = first_moment / (1.0 - self.config.beta1**optimization_step)
+                        second_unbiased = second_moment / (1.0 - self.config.beta2**optimization_step)
 
-            if metrics["loss"] < history["best_loss"]:
-                history["best_loss"] = metrics["loss"]
-                history["best_accuracy"] = metrics["accuracy"]
-                history["best_parameters"] = parameters.copy()
-                history["best_threshold"] = self._current_threshold(model)
+                        parameters = parameters - self.config.learning_rate * first_unbiased / (
+                            np.sqrt(second_unbiased) + self.config.epsilon
+                        )
+                    else:
+                        parameters = parameters - self.config.learning_rate * gradient
+
+                    model.set_parameters(parameters)
+
+                with timed(profile, "train.threshold_update"):
+                    self._maybe_update_classification_threshold(model, split, parameters)
+
+                with timed(profile, "train.epoch_evaluate"):
+                    metrics = self.evaluate(model, split, parameters=parameters)
+
+                history["loss"].append(metrics["loss"])
+                history["accuracy"].append(metrics["accuracy"])
+                history["threshold"].append(self._current_threshold(model))
+
+                if metrics["loss"] < history["best_loss"]:
+                    history["best_loss"] = metrics["loss"]
+                    history["best_accuracy"] = metrics["accuracy"]
+                    history["best_parameters"] = parameters.copy()
+                    history["best_threshold"] = self._current_threshold(model)
 
         history["final_parameters"] = parameters.copy()
         history["final_threshold"] = self._current_threshold(model)

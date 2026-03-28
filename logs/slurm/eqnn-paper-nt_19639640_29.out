@@ -24,3 +24,17 @@ numpy = 2.2.6
 scipy = 1.16.3
 eqnn import ok
 [Thu Mar 26 12:15:59 PDT 2026] Launching reproduction for N=10, train_size=12
+Completed 3 paper reproduction runs
+Summary written to /scratch/users/jdehoney/eqnn_thesis/data/reproduction/paper_reproduction_19639640/n10/train_size_12/summary.csv
+[Fri Mar 27 14:45:49 PDT 2026] Completed paper reproduction for N=10, train_size=12
+Contents of /scratch/users/jdehoney/eqnn_thesis/data/reproduction/paper_reproduction_19639640/n10/train_size_12:
+total 26K
+drwxr-xr-x 5 jdehoney kpohl 4.0K Mar 27 14:45 .
+drwxr-xr-x 6 jdehoney kpohl 4.0K Mar 26 12:15 ..
+drwxr-xr-x 3 jdehoney kpohl 4.0K Mar 26 12:16 datasets
+drwxr-xr-x 3 jdehoney kpohl 4.0K Mar 26 21:07 experiments
+-rw-r--r-- 1 jdehoney kpohl  385 Mar 26 12:15 paper_reproduction_config.json
+drwxr-xr-x 2 jdehoney kpohl 4.0K Mar 27 14:45 phase_diagrams
+-rw-r--r-- 1 jdehoney kpohl  945 Mar 27 14:45 runs.json
+-rw-r--r-- 1 jdehoney kpohl  523 Mar 27 14:45 summary.csv
+-rw-r--r-- 1 jdehoney kpohl  638 Mar 27 14:45 summary.json

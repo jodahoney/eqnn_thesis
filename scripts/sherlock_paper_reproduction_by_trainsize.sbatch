@@ -10,26 +10,6 @@
 
 set -euo pipefail
 
-# One array task = one (num_qubits, train_size) pair.
-# Seeds are run together within the task.
-#
-# Grid:
-#   num_qubits in {6,7,8,9,10,11,12,13}   -> 8 values
-#   train_size in {2,4,6,8,10,12}         -> 6 values
-# Total tasks = 8 * 6 = 48, so --array=0-47
-#
-# Usage:
-#   mkdir -p /scratch/users/jdehoney/eqnn_thesis/logs/slurm
-#   cd /scratch/users/jdehoney/eqnn_thesis
-#   sbatch scripts/sherlock_paper_reproduction_by_trainsize.sbatch
-#
-# Optional overrides:
-#   PROJ=/scratch/users/jdehoney/eqnn_thesis \
-#   VENV_DIR=/scratch/users/jdehoney/venvs/eqnn_py312 \
-#   MODULE_PYTHON=python/3.12.1 \
-#   MODULE_OPENBLAS=openblas/0.3.28 \
-#   sbatch --array=0-5 scripts/sherlock_paper_reproduction_by_trainsize.sbatch
-
 PROJ="${PROJ:-/scratch/users/jdehoney/eqnn_thesis}"
 PROJECT_ROOT="${PROJECT_ROOT:-$PROJ}"
 
@@ -50,6 +30,8 @@ INITIALIZATION_STRATEGY="${INITIALIZATION_STRATEGY:-noisy_current}"
 INITIALIZATION_NOISE_SCALE="${INITIALIZATION_NOISE_SCALE:-0.05}"
 EIGENSOLVER="${EIGENSOLVER:-auto}"
 
+FORCE_REGENERATE="${FORCE_REGENERATE:-0}"
+
 TASK_ID="${SLURM_ARRAY_TASK_ID:?SLURM_ARRAY_TASK_ID is required}"
 
 N_COUNT="${#NUM_QUBITS_LIST[@]}"
@@ -61,7 +43,6 @@ if (( TASK_ID < 0 || TASK_ID >= TOTAL )); then
     exit 1
 fi
 
-# Decode TASK_ID into (num_qubits, train_size)
 N_INDEX=$(( TASK_ID / T_COUNT ))
 T_INDEX=$(( TASK_ID % T_COUNT ))
 
@@ -72,7 +53,10 @@ RUN_ID="${RUN_ID:-paper_reproduction_${SLURM_ARRAY_JOB_ID:-${SLURM_JOB_ID:-manua
 OUTPUT_ROOT="${OUTPUT_ROOT:-$PROJECT_ROOT/data/reproduction/$RUN_ID}"
 RUN_OUTPUT_DIR="${RUN_OUTPUT_DIR:-$OUTPUT_ROOT/n${NUM_QUBITS}/train_size_${TRAIN_SIZE}}"
 
-mkdir -p "$PROJECT_ROOT/logs/slurm" "$RUN_OUTPUT_DIR"
+CACHE_DIR="${CACHE_DIR:-$PROJECT_ROOT/data/cache/paper_reproduction}"
+PROFILE_JSON="${PROFILE_JSON:-$RUN_OUTPUT_DIR/runtime_profile.json}"
+
+mkdir -p "$PROJECT_ROOT/logs/slurm" "$RUN_OUTPUT_DIR" "$CACHE_DIR"
 cd "$PROJECT_ROOT"
 
 if command -v ml >/dev/null 2>&1; then
@@ -96,7 +80,6 @@ fi
 # shellcheck disable=SC1090
 source "$VENV_DIR/bin/activate"
 
-# Keep threading controlled and independent of weird inherited values.
 export OMP_NUM_THREADS=4
 export OPENBLAS_NUM_THREADS=4
 export MKL_NUM_THREADS=4
@@ -112,7 +95,6 @@ echo "SLURM array job: ${SLURM_ARRAY_JOB_ID:-none}"
 echo "SLURM job: ${SLURM_JOB_ID:-unknown}"
 echo "SLURM array task: ${SLURM_ARRAY_TASK_ID:-none}"
 echo "SLURM_CPUS_PER_TASK=${SLURM_CPUS_PER_TASK:-unset}"
-echo "SLURM_TRES_PER_TASK=${SLURM_TRES_PER_TASK:-unset}"
 echo "Decoded num qubits: $NUM_QUBITS"
 echo "Decoded train size: $TRAIN_SIZE"
 echo "Seeds: $RANDOM_SEEDS"
@@ -122,6 +104,9 @@ echo "Gradient backend: $GRADIENT_BACKEND"
 echo "Initialization strategy: $INITIALIZATION_STRATEGY"
 echo "Initialization noise scale: $INITIALIZATION_NOISE_SCALE"
 echo "Eigensolver: $EIGENSOLVER"
+echo "Cache dir: $CACHE_DIR"
+echo "Profile json: $PROFILE_JSON"
+echo "Force regenerate: $FORCE_REGENERATE"
 echo "Output dir: $RUN_OUTPUT_DIR"
 
 python - <<'PY'
@@ -135,17 +120,36 @@ PY
 
 echo "[$(date)] Launching reproduction for N=$NUM_QUBITS, train_size=$TRAIN_SIZE"
 
-"$PYTHON_BIN" -m eqnn run-paper-reproduction \
-  --num-qubits "$NUM_QUBITS" \
-  --train-sizes "$TRAIN_SIZE" \
-  --random-seeds $RANDOM_SEEDS \
-  --epochs "$EPOCHS" \
-  --learning-rate "$LEARNING_RATE" \
-  --gradient-backend "$GRADIENT_BACKEND" \
-  --initialization-strategy "$INITIALIZATION_STRATEGY" \
-  --initialization-noise-scale "$INITIALIZATION_NOISE_SCALE" \
-  --eigensolver "$EIGENSOLVER" \
-  --output-dir "$RUN_OUTPUT_DIR"
+if [[ "$FORCE_REGENERATE" == "1" ]]; then
+    "$PYTHON_BIN" -m eqnn run-paper-reproduction \
+      --num-qubits "$NUM_QUBITS" \
+      --train-sizes "$TRAIN_SIZE" \
+      --random-seeds $RANDOM_SEEDS \
+      --epochs "$EPOCHS" \
+      --learning-rate "$LEARNING_RATE" \
+      --gradient-backend "$GRADIENT_BACKEND" \
+      --initialization-strategy "$INITIALIZATION_STRATEGY" \
+      --initialization-noise-scale "$INITIALIZATION_NOISE_SCALE" \
+      --eigensolver "$EIGENSOLVER" \
+      --cache-dir "$CACHE_DIR" \
+      --force-regenerate \
+      --profile-json "$PROFILE_JSON" \
+      --output-dir "$RUN_OUTPUT_DIR"
+else
+    "$PYTHON_BIN" -m eqnn run-paper-reproduction \
+      --num-qubits "$NUM_QUBITS" \
+      --train-sizes "$TRAIN_SIZE" \
+      --random-seeds $RANDOM_SEEDS \
+      --epochs "$EPOCHS" \
+      --learning-rate "$LEARNING_RATE" \
+      --gradient-backend "$GRADIENT_BACKEND" \
+      --initialization-strategy "$INITIALIZATION_STRATEGY" \
+      --initialization-noise-scale "$INITIALIZATION_NOISE_SCALE" \
+      --eigensolver "$EIGENSOLVER" \
+      --cache-dir "$CACHE_DIR" \
+      --profile-json "$PROFILE_JSON" \
+      --output-dir "$RUN_OUTPUT_DIR"
+fi
 
 echo "[$(date)] Completed paper reproduction for N=$NUM_QUBITS, train_size=$TRAIN_SIZE"
 echo "Contents of $RUN_OUTPUT_DIR:"

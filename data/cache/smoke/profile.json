@@ -1,0 +1,147 @@
+{
+  "experiment.build_model": {
+    "count": 1,
+    "mean_seconds": 0.0001054573804140091,
+    "total_seconds": 0.0001054573804140091
+  },
+  "experiment.build_trainer": {
+    "count": 1,
+    "mean_seconds": 1.4416873455047607e-06,
+    "total_seconds": 1.4416873455047607e-06
+  },
+  "experiment.final_test_evaluate": {
+    "count": 1,
+    "mean_seconds": 1.5083340601995587,
+    "total_seconds": 1.5083340601995587
+  },
+  "experiment.final_train_evaluate": {
+    "count": 1,
+    "mean_seconds": 0.029511189088225365,
+    "total_seconds": 0.029511189088225365
+  },
+  "experiment.prepare_output_dir": {
+    "count": 1,
+    "mean_seconds": 0.00018152128905057907,
+    "total_seconds": 0.00018152128905057907
+  },
+  "experiment.test_predict": {
+    "count": 1,
+    "mean_seconds": 0.983779146336019,
+    "total_seconds": 0.983779146336019
+  },
+  "experiment.train_fit": {
+    "count": 1,
+    "mean_seconds": 0.10856054536998272,
+    "total_seconds": 0.10856054536998272
+  },
+  "experiment.train_predict": {
+    "count": 1,
+    "mean_seconds": 0.02017346490174532,
+    "total_seconds": 0.02017346490174532
+  },
+  "experiment.write_artifacts": {
+    "count": 1,
+    "mean_seconds": 0.005158373154699802,
+    "total_seconds": 0.005158373154699802
+  },
+  "io.load_dataset_bundle": {
+    "count": 1,
+    "mean_seconds": 0.007462415844202042,
+    "total_seconds": 0.007462415844202042
+  },
+  "io.save_dataset_bundle": {
+    "count": 1,
+    "mean_seconds": 0.00831681303679943,
+    "total_seconds": 0.00831681303679943
+  },
+  "paper.aggregate_train_size": {
+    "count": 1,
+    "mean_seconds": 0.0031992467120289803,
+    "total_seconds": 0.0031992467120289803
+  },
+  "paper.cache.dataset_load": {
+    "count": 1,
+    "mean_seconds": 0.007469389587640762,
+    "total_seconds": 0.007469389587640762
+  },
+  "paper.dataset.acquire": {
+    "count": 1,
+    "mean_seconds": 0.007785734720528126,
+    "total_seconds": 0.007785734720528126
+  },
+  "paper.dataset.save_output_copy": {
+    "count": 1,
+    "mean_seconds": 0.008324206806719303,
+    "total_seconds": 0.008324206806719303
+  },
+  "paper.output.prepare_root": {
+    "count": 1,
+    "mean_seconds": 6.288755685091019e-05,
+    "total_seconds": 6.288755685091019e-05
+  },
+  "paper.run_single_experiment": {
+    "count": 1,
+    "mean_seconds": 2.6592344911769032,
+    "total_seconds": 2.6592344911769032
+  },
+  "paper.write_config": {
+    "count": 1,
+    "mean_seconds": 0.0014987289905548096,
+    "total_seconds": 0.0014987289905548096
+  },
+  "paper.write_runs_json": {
+    "count": 1,
+    "mean_seconds": 0.0012870607897639275,
+    "total_seconds": 0.0012870607897639275
+  },
+  "paper.write_summary_csv": {
+    "count": 1,
+    "mean_seconds": 0.0011738678440451622,
+    "total_seconds": 0.0011738678440451622
+  },
+  "paper.write_summary_json": {
+    "count": 1,
+    "mean_seconds": 0.0013308729976415634,
+    "total_seconds": 0.0013308729976415634
+  },
+  "train.backward_gradient": {
+    "count": 1,
+    "mean_seconds": 0.01995300967246294,
+    "total_seconds": 0.01995300967246294
+  },
+  "train.epoch_evaluate": {
+    "count": 1,
+    "mean_seconds": 0.029699673876166344,
+    "total_seconds": 0.029699673876166344
+  },
+  "train.forward_loss": {
+    "count": 2,
+    "mean_seconds": 0.2507058968767524,
+    "total_seconds": 0.5014117937535048
+  },
+  "train.forward_predict": {
+    "count": 2,
+    "mean_seconds": 0.2528783082962036,
+    "total_seconds": 0.5057566165924072
+  },
+  "train.forward_predict_labels": {
+    "count": 2,
+    "mean_seconds": 0.26529124565422535,
+    "total_seconds": 0.5305824913084507
+  },
+  "train.initial_evaluate": {
+    "count": 1,
+    "mean_seconds": 0.030472837388515472,
+    "total_seconds": 0.030472837388515472
+  },
+  "train.optimizer_step": {
+    "count": 1,
+    "mean_seconds": 3.14982607960701e-05,
+    "total_seconds": 3.14982607960701e-05
+  },
+  "train.threshold_update": {
+    "count": 1,
+    "mean_seconds": 0.00982713419944048,
+    "total_seconds": 0.00982713419944048
+  }
+}

@@ -1,0 +1,17 @@
+[
+  {
+    "mean_test_accuracy": 0.0,
+    "mean_test_loss": 0.44233523608899716,
+    "mean_threshold": 0.8485660574908704,
+    "mean_train_accuracy": 0.0,
+    "mean_train_loss": 0.45275120293571114,
+    "num_runs": 1,
+    "phase_diagram_path": "/scratch/users/jdehoney/eqnn_thesis/data/reproduction/smoke/phase_diagrams/train_size_2_phase_diagram.npz",
+    "train_size": 2,
+    "variance_test_accuracy": 0.0,
+    "variance_test_loss": 0.0,
+    "variance_threshold": 0.0,
+    "variance_train_accuracy": 0.0,
+    "variance_train_loss": 0.0
+  }
+]

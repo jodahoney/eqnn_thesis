@@ -1,0 +1,43 @@
+[Sat Mar 28 16:04:30 PDT 2026] Starting paper reproduction task
+Host: sh02-01n25.int
+Project root: /scratch/users/jdehoney/eqnn_thesis
+Working dir: /scratch/users/jdehoney/eqnn_thesis
+Python executable: /scratch/users/jdehoney/venvs/eqnn_py312/bin/python3
+Python version: Python 3.12.1
+SLURM array job: 19819180
+SLURM job: 19819182
+SLURM array task: 0
+SLURM_CPUS_PER_TASK=4
+Decoded num qubits: 6
+Decoded train size: 2
+Seeds: 0 1 2
+Epochs: 750
+Learning rate: 0.05
+Gradient backend: exact
+Initialization strategy: noisy_current
+Initialization noise scale: 0.05
+Eigensolver: auto
+Cache dir: /scratch/users/jdehoney/eqnn_thesis/data/cache/paper_reproduction
+Profile json: /scratch/users/jdehoney/eqnn_thesis/data/reproduction/paper_reproduction_19819180/n6/train_size_2/runtime_profile.json
+Force regenerate: 0
+Output dir: /scratch/users/jdehoney/eqnn_thesis/data/reproduction/paper_reproduction_19819180/n6/train_size_2
+sys.executable = /scratch/users/jdehoney/venvs/eqnn_py312/bin/python
+numpy = 2.2.6
+scipy = 1.16.3
+eqnn import ok
+[Sat Mar 28 16:04:33 PDT 2026] Launching reproduction for N=6, train_size=2
+Completed 3 paper reproduction runs
+Summary written to /scratch/users/jdehoney/eqnn_thesis/data/reproduction/paper_reproduction_19819180/n6/train_size_2/summary.csv
+[Sat Mar 28 16:06:00 PDT 2026] Completed paper reproduction for N=6, train_size=2
+Contents of /scratch/users/jdehoney/eqnn_thesis/data/reproduction/paper_reproduction_19819180/n6/train_size_2:
+total 26K
+drwxr-xr-x 5 jdehoney kpohl 4.0K Mar 28 16:06 .
+drwxr-xr-x 4 jdehoney kpohl 4.0K Mar 28 16:04 ..
+drwxr-xr-x 3 jdehoney kpohl 4.0K Mar 28 16:04 datasets
+drwxr-xr-x 3 jdehoney kpohl 4.0K Mar 28 16:05 experiments
+-rw-r--r-- 1 jdehoney kpohl  383 Mar 28 16:04 paper_reproduction_config.json
+drwxr-xr-x 2 jdehoney kpohl 4.0K Mar 28 16:06 phase_diagrams
+-rw-r--r-- 1 jdehoney kpohl 1.4K Mar 28 16:06 runs.json
+-rw-r--r-- 1 jdehoney kpohl 4.7K Mar 28 16:06 runtime_profile.json
+-rw-r--r-- 1 jdehoney kpohl  556 Mar 28 16:06 summary.csv
+-rw-r--r-- 1 jdehoney kpohl  671 Mar 28 16:06 summary.json

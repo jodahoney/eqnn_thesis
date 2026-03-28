@@ -1,0 +1,2 @@
+Running "module reset". Resetting modules to system default. The following $MODULEPATH directories have been removed: None
+/var/spool/slurmd/job19818761/slurm_script: line 138: EXTRA_ARGS[@]: unbound variable

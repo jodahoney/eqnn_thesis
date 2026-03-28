@@ -1,0 +1,28 @@
+[Sat Mar 28 15:48:47 PDT 2026] Starting paper reproduction task
+Host: sh04-01n29.int
+Project root: /scratch/users/jdehoney/eqnn_thesis
+Working dir: /scratch/users/jdehoney/eqnn_thesis
+Python executable: /scratch/users/jdehoney/venvs/eqnn_py312/bin/python3
+Python version: Python 3.12.1
+SLURM array job: 19818759
+SLURM job: 19818761
+SLURM array task: 0
+SLURM_CPUS_PER_TASK=4
+Decoded num qubits: 6
+Decoded train size: 2
+Seeds: 0 1 2
+Epochs: 750
+Learning rate: 0.05
+Gradient backend: exact
+Initialization strategy: noisy_current
+Initialization noise scale: 0.05
+Eigensolver: auto
+Cache dir: /scratch/users/jdehoney/eqnn_thesis/data/cache/paper_reproduction
+Profile json: /scratch/users/jdehoney/eqnn_thesis/data/reproduction/paper_reproduction_19818759/n6/train_size_2/runtime_profile.json
+Force regenerate: 0
+Output dir: /scratch/users/jdehoney/eqnn_thesis/data/reproduction/paper_reproduction_19818759/n6/train_size_2
+sys.executable = /scratch/users/jdehoney/venvs/eqnn_py312/bin/python
+numpy = 2.2.6
+scipy = 1.16.3
+eqnn import ok
+[Sat Mar 28 15:48:50 PDT 2026] Launching reproduction for N=6, train_size=2

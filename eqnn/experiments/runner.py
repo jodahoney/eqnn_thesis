@@ -14,6 +14,7 @@ from eqnn.datasets.heisenberg import DatasetBundle, HeisenbergDatasetConfig, gen
 from eqnn.datasets.io import load_dataset_bundle, save_dataset_bundle
 from eqnn.models import BaselineQCNN, BaselineQCNNConfig, QCNNConfig, SU2QCNN
 from eqnn.training import Trainer, TrainingConfig
+from eqnn.utils.timing import RuntimeProfile, timed
 
 
 @dataclass(frozen=True)
@@ -92,12 +93,15 @@ def load_or_generate_dataset(
     *,
     dataset_dir: str | Path | None = None,
     dataset_config: HeisenbergDatasetConfig | None = None,
+    profile: RuntimeProfile | None = None,
 ) -> DatasetBundle:
     if dataset_dir is not None:
-        return load_dataset_bundle(dataset_dir)
+        with timed(profile, "dataset.load_bundle"):
+            return load_dataset_bundle(dataset_dir, profile=profile)
     if dataset_config is None:
         raise ValueError("Either dataset_dir or dataset_config must be provided")
-    return generate_dataset(dataset_config)
+    with timed(profile, "dataset.generate_bundle"):
+        return generate_dataset(dataset_config, profile=profile)
 
 
 def run_training_experiment(
@@ -107,25 +111,38 @@ def run_training_experiment(
     *,
     output_dir: str | Path | None = None,
     experiment_name: str | None = None,
+    profile: RuntimeProfile | None = None,
 ) -> dict[str, Any]:
-    model = build_model(experiment_config)
-    trainer = Trainer(training_config)
-    history = trainer.fit(model, dataset)
+    with timed(profile, "experiment.build_model"):
+        model = build_model(experiment_config)
 
-    train_metrics = trainer.evaluate(model, dataset.train)
-    test_metrics = trainer.evaluate(model, dataset.test)
-    train_probabilities = model.predict_batch(dataset.train.states)
-    test_probabilities = model.predict_batch(dataset.test.states)
-    train_predicted_labels = (
-        model.predict_labels_batch(dataset.train.states)
-        if hasattr(model, "predict_labels_batch")
-        else (train_probabilities >= 0.5).astype(np.int64)
-    )
-    test_predicted_labels = (
-        model.predict_labels_batch(dataset.test.states)
-        if hasattr(model, "predict_labels_batch")
-        else (test_probabilities >= 0.5).astype(np.int64)
-    )
+    with timed(profile, "experiment.build_trainer"):
+        trainer = Trainer(training_config)
+
+    with timed(profile, "experiment.train_fit"):
+        history = trainer.fit(model, dataset, profile=profile)
+
+    with timed(profile, "experiment.final_train_evaluate"):
+        train_metrics = trainer.evaluate(model, dataset.train, profile=profile)
+
+    with timed(profile, "experiment.final_test_evaluate"):
+        test_metrics = trainer.evaluate(model, dataset.test, profile=profile)
+
+    with timed(profile, "experiment.train_predict"):
+        train_probabilities = model.predict_batch(dataset.train.states)
+        train_predicted_labels = (
+            model.predict_labels_batch(dataset.train.states)
+            if hasattr(model, "predict_labels_batch")
+            else (train_probabilities >= 0.5).astype(np.int64)
+        )
+
+    with timed(profile, "experiment.test_predict"):
+        test_probabilities = model.predict_batch(dataset.test.states)
+        test_predicted_labels = (
+            model.predict_labels_batch(dataset.test.states)
+            if hasattr(model, "predict_labels_batch")
+            else (test_probabilities >= 0.5).astype(np.int64)
+        )
 
     result = {
         "experiment_name": experiment_name or _default_experiment_name(experiment_config),
@@ -143,20 +160,33 @@ def run_training_experiment(
         "history": _serialize_for_json(history),
     }
 
+    output_path: Path | None = None
     if output_dir is not None:
         output_path = Path(output_dir)
-        output_path.mkdir(parents=True, exist_ok=True)
-        _save_experiment_artifacts(
-            output_path=output_path,
-            result=result,
-            dataset=dataset,
-            model=model,
-            train_probabilities=train_probabilities,
-            test_probabilities=test_probabilities,
-            train_predicted_labels=train_predicted_labels,
-            test_predicted_labels=test_predicted_labels,
-        )
+
+        with timed(profile, "experiment.prepare_output_dir"):
+            output_path.mkdir(parents=True, exist_ok=True)
+
+        with timed(profile, "experiment.write_artifacts"):
+            _save_experiment_artifacts(
+                output_path=output_path,
+                dataset=dataset,
+                model=model,
+                train_probabilities=train_probabilities,
+                test_probabilities=test_probabilities,
+                train_predicted_labels=train_predicted_labels,
+                test_predicted_labels=test_predicted_labels,
+            )
+
         result["output_dir"] = str(output_path.resolve())
+
+    if profile is not None:
+        result["runtime_profile"] = _serialize_for_json(profile.summary())
+
+    if output_path is not None:
+        (output_path / "metrics.json").write_text(
+            json.dumps(_serialize_for_json(result), indent=2, sort_keys=True) + "\n"
+        )
 
     return result
 
@@ -255,7 +285,6 @@ def run_benchmark_sweep(
 def _save_experiment_artifacts(
     *,
     output_path: Path,
-    result: dict[str, Any],
     dataset: DatasetBundle,
     model: object,
     train_probabilities: np.ndarray,
@@ -263,9 +292,6 @@ def _save_experiment_artifacts(
     train_predicted_labels: np.ndarray,
     test_predicted_labels: np.ndarray,
 ) -> None:
-    (output_path / "metrics.json").write_text(
-        json.dumps(_serialize_for_json(result), indent=2, sort_keys=True) + "\n"
-    )
     np.save(output_path / "best_parameters.npy", model.get_parameters())
     np.savez_compressed(
         output_path / "train_predictions.npz",

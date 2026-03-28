@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 from typing import Sequence
 
+from eqnn.datasets.cache import load_or_generate_cached_dataset
 from eqnn.datasets.heisenberg import HeisenbergDatasetConfig, generate_dataset
 from eqnn.datasets.io import load_dataset_bundle, save_dataset_bundle
 from eqnn.experiments import (
@@ -18,6 +20,7 @@ from eqnn.experiments import (
     summarize_experiment_directory,
 )
 from eqnn.training import TrainingConfig
+from eqnn.utils.timing import RuntimeProfile
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -57,6 +60,9 @@ def build_parser() -> argparse.ArgumentParser:
     dataset_parser.add_argument("--partial-reflection-pairs", type=int, default=None)
     dataset_parser.add_argument("--split-seed", type=int, default=0)
     dataset_parser.add_argument("--output-dir", type=Path, required=True)
+    dataset_parser.add_argument("--cache-dir", type=Path, default=None)
+    dataset_parser.add_argument("--force-regenerate", action="store_true")
+    dataset_parser.add_argument("--profile-json", type=Path, default=None)
     dataset_parser.set_defaults(handler=_handle_generate_dataset)
 
     experiment_parser = subparsers.add_parser(
@@ -133,6 +139,9 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("auto", "dense", "sparse"),
         default="auto",
     )
+    reproduction_parser.add_argument("--cache-dir", type=Path, default=None)
+    reproduction_parser.add_argument("--force-regenerate", action="store_true")
+    reproduction_parser.add_argument("--profile-json", type=Path, default=None)
     reproduction_parser.add_argument("--output-dir", type=Path, required=True)
     reproduction_parser.set_defaults(handler=_handle_run_paper_reproduction)
 
@@ -166,8 +175,27 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _handle_generate_dataset(args: argparse.Namespace) -> int:
     config = _dataset_config_from_args(args)
-    bundle = generate_dataset(config)
-    save_dataset_bundle(bundle, args.output_dir)
+    profile = RuntimeProfile()
+
+    if args.cache_dir is not None:
+        bundle, cache_path, cache_hit = load_or_generate_cached_dataset(
+            config,
+            cache_dir=args.cache_dir,
+            profile=profile,
+            force_rebuild=args.force_regenerate,
+        )
+        save_dataset_bundle(bundle, args.output_dir, profile=profile)
+        print(
+            f"{'Loaded' if cache_hit else 'Built'} cached dataset at "
+            f"{cache_path.resolve()}"
+        )
+    else:
+        bundle = generate_dataset(config, profile=profile)
+        save_dataset_bundle(bundle, args.output_dir, profile=profile)
+
+    if args.profile_json is not None:
+        args.profile_json.parent.mkdir(parents=True, exist_ok=True)
+        args.profile_json.write_text(json.dumps(profile.summary(), indent=2, sort_keys=True) + "\n")
 
     print(f"Wrote dataset to {args.output_dir.resolve()}")
     print(
@@ -179,7 +207,9 @@ def _handle_generate_dataset(args: argparse.Namespace) -> int:
 
 
 def _handle_run_experiment(args: argparse.Namespace) -> int:
-    dataset_bundle = _load_or_generate_dataset_from_args(args)
+    profile = RuntimeProfile()
+    dataset_bundle = _load_or_generate_dataset_from_args(args, profile=profile)
+
     experiment_config = ExperimentConfig(
         model_family=args.model_family,
         num_qubits=args.num_qubits,
@@ -191,12 +221,18 @@ def _handle_run_experiment(args: argparse.Namespace) -> int:
         readout_mode=args.readout_mode,
     )
     training_config = _training_config_from_args(args)
+
     result = run_training_experiment(
         dataset_bundle,
         experiment_config,
         training_config,
         output_dir=args.output_dir,
+        profile=profile,
     )
+
+    if args.profile_json is not None:
+        args.profile_json.parent.mkdir(parents=True, exist_ok=True)
+        args.profile_json.write_text(json.dumps(profile.summary(), indent=2, sort_keys=True) + "\n")
 
     print(f"Experiment complete: {result['experiment_name']}")
     print(
@@ -234,12 +270,18 @@ def _handle_run_benchmark_sweep(args: argparse.Namespace) -> int:
     )
     results = run_benchmark_sweep(sweep_config, args.output_dir)
 
+    if args.profile_json is not None:
+        args.profile_json.parent.mkdir(parents=True, exist_ok=True)
+        args.profile_json.write_text(json.dumps({"note": "benchmark sweep profiling not yet wired"}, indent=2) + "\n")
+
     print(f"Completed {len(results)} experiments")
     print(f"Summary written to {(args.output_dir / 'summary.csv').resolve()}")
     return 0
 
 
 def _handle_run_paper_reproduction(args: argparse.Namespace) -> int:
+    profile = RuntimeProfile()
+
     config = PaperReproductionConfig(
         num_qubits=args.num_qubits,
         train_sizes=tuple(args.train_sizes),
@@ -255,7 +297,18 @@ def _handle_run_paper_reproduction(args: argparse.Namespace) -> int:
         dense_test_points=args.dense_test_points,
         eigensolver=args.eigensolver,
     )
-    results = run_paper_reproduction_suite(config, args.output_dir)
+
+    results = run_paper_reproduction_suite(
+        config,
+        args.output_dir,
+        cache_dir=args.cache_dir,
+        force_rebuild=args.force_regenerate,
+        profile=profile,
+    )
+
+    if args.profile_json is not None:
+        args.profile_json.parent.mkdir(parents=True, exist_ok=True)
+        args.profile_json.write_text(json.dumps(profile.summary(), indent=2, sort_keys=True) + "\n")
 
     print(f"Completed {len(results['runs'])} paper reproduction runs")
     print(f"Summary written to {(args.output_dir / 'summary.csv').resolve()}")
@@ -328,6 +381,9 @@ def _add_dataset_generation_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--diagnostic-window", type=float, default=0.05)
     parser.add_argument("--partial-reflection-pairs", type=int, default=None)
     parser.add_argument("--split-seed", type=int, default=0)
+    parser.add_argument("--cache-dir", type=Path, default=None)
+    parser.add_argument("--force-regenerate", action="store_true")
+    parser.add_argument("--profile-json", type=Path, default=None)
 
 
 def _add_dataset_loading_or_generation_args(parser: argparse.ArgumentParser) -> None:
@@ -433,10 +489,26 @@ def _training_config_from_args(args: argparse.Namespace) -> TrainingConfig:
     )
 
 
-def _load_or_generate_dataset_from_args(args: argparse.Namespace) -> DatasetBundle:
+def _load_or_generate_dataset_from_args(
+    args: argparse.Namespace,
+    *,
+    profile: RuntimeProfile | None = None,
+) -> DatasetBundle:
     if args.dataset_dir is not None:
-        return load_dataset_bundle(args.dataset_dir)
-    return generate_dataset(_dataset_config_from_args(args))
+        return load_dataset_bundle(args.dataset_dir, profile=profile)
+
+    config = _dataset_config_from_args(args)
+
+    if args.cache_dir is not None:
+        bundle, _, _ = load_or_generate_cached_dataset(
+            config,
+            cache_dir=args.cache_dir,
+            profile=profile,
+            force_rebuild=args.force_regenerate,
+        )
+        return bundle
+
+    return generate_dataset(config, profile=profile)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
