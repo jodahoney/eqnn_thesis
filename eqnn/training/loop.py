@@ -178,7 +178,7 @@ class Trainer:
         parameters = np.asarray(initial_parameters, dtype=np.float64).copy()
 
         with timed(profile, "train.initial_evaluate"):
-            first_metrics = self.evaluate(model, split, parameters=parameters)
+            first_metrics = self.evaluate(model, split, parameters=parameters, profile=profile)
 
         current_threshold = self._current_threshold(model)
 
@@ -223,21 +223,21 @@ class Trainer:
 
                     model.set_parameters(parameters)
 
-                with timed(profile, "train.threshold_update"):
-                    self._maybe_update_classification_threshold(model, split, parameters)
+            with timed(profile, "train.threshold_update"):
+                self._maybe_update_classification_threshold(model, split, parameters)
 
-                with timed(profile, "train.epoch_evaluate"):
-                    metrics = self.evaluate(model, split, parameters=parameters)
+            with timed(profile, "train.epoch_evaluate"):
+                metrics = self.evaluate(model, split, parameters=parameters, profile=profile)
 
-                history["loss"].append(metrics["loss"])
-                history["accuracy"].append(metrics["accuracy"])
-                history["threshold"].append(self._current_threshold(model))
+            history["loss"].append(metrics["loss"])
+            history["accuracy"].append(metrics["accuracy"])
+            history["threshold"].append(self._current_threshold(model))
 
-                if metrics["loss"] < history["best_loss"]:
-                    history["best_loss"] = metrics["loss"]
-                    history["best_accuracy"] = metrics["accuracy"]
-                    history["best_parameters"] = parameters.copy()
-                    history["best_threshold"] = self._current_threshold(model)
+            if metrics["loss"] < history["best_loss"]:
+                history["best_loss"] = metrics["loss"]
+                history["best_accuracy"] = metrics["accuracy"]
+                history["best_parameters"] = parameters.copy()
+                history["best_threshold"] = self._current_threshold(model)
 
         history["final_parameters"] = parameters.copy()
         history["final_threshold"] = self._current_threshold(model)
