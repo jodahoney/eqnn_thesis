@@ -1,0 +1,21 @@
+{
+  "critical_ratio": 1.0,
+  "dense_test_points": 101,
+  "eigensolver": "auto",
+  "epochs": 750,
+  "gradient_backend": "exact",
+  "initialization_noise_scale": 0.05,
+  "initialization_strategy": "noisy_current",
+  "learning_rate": 0.05,
+  "left_ratio_min": 0.0,
+  "num_qubits": 8,
+  "random_seeds": [
+    0,
+    1,
+    2
+  ],
+  "right_ratio_max": 2.0,
+  "train_sizes": [
+    10
+  ]
+}

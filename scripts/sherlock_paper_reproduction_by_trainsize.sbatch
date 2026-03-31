@@ -5,8 +5,6 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16G
 #SBATCH --array=0-47
-#SBATCH --output=/scratch/users/jdehoney/eqnn_thesis/logs/slurm/%x_%A_%a.out
-#SBATCH --error=/scratch/users/jdehoney/eqnn_thesis/logs/slurm/%x_%A_%a.err
 
 set -euo pipefail
 

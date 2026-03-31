@@ -1,0 +1,142 @@
+{
+  "experiment.build_model": {
+    "count": 3,
+    "mean_seconds": 0.00015974945078293482,
+    "total_seconds": 0.0004792483523488045
+  },
+  "experiment.build_trainer": {
+    "count": 3,
+    "mean_seconds": 2.2932266195615134e-06,
+    "total_seconds": 6.87967985868454e-06
+  },
+  "experiment.final_test_evaluate": {
+    "count": 3,
+    "mean_seconds": 0.7092392360791564,
+    "total_seconds": 2.127717708237469
+  },
+  "experiment.final_train_evaluate": {
+    "count": 3,
+    "mean_seconds": 0.027486568006376427,
+    "total_seconds": 0.08245970401912928
+  },
+  "experiment.prepare_output_dir": {
+    "count": 3,
+    "mean_seconds": 0.001301707544674476,
+    "total_seconds": 0.003905122634023428
+  },
+  "experiment.test_predict": {
+    "count": 3,
+    "mean_seconds": 1.4552542851306498,
+    "total_seconds": 4.365762855391949
+  },
+  "experiment.train_fit": {
+    "count": 3,
+    "mean_seconds": 69.98722521138068,
+    "total_seconds": 209.961675634142
+  },
+  "experiment.train_predict": {
+    "count": 3,
+    "mean_seconds": 0.057272220961749554,
+    "total_seconds": 0.17181666288524866
+  },
+  "experiment.write_artifacts": {
+    "count": 3,
+    "mean_seconds": 0.00810406000042955,
+    "total_seconds": 0.024312180001288652
+  },
+  "io.load_dataset_bundle": {
+    "count": 1,
+    "mean_seconds": 0.025592914782464504,
+    "total_seconds": 0.025592914782464504
+  },
+  "io.save_dataset_bundle": {
+    "count": 1,
+    "mean_seconds": 0.019187394995242357,
+    "total_seconds": 0.019187394995242357
+  },
+  "paper.aggregate_train_size": {
+    "count": 1,
+    "mean_seconds": 0.011721760965883732,
+    "total_seconds": 0.011721760965883732
+  },
+  "paper.cache.dataset_load": {
+    "count": 1,
+    "mean_seconds": 0.02560504712164402,
+    "total_seconds": 0.02560504712164402
+  },
+  "paper.dataset.acquire": {
+    "count": 1,
+    "mean_seconds": 0.026360878720879555,
+    "total_seconds": 0.026360878720879555
+  },
+  "paper.dataset.save_output_copy": {
+    "count": 1,
+    "mean_seconds": 0.019200093112885952,
+    "total_seconds": 0.019200093112885952
+  },
+  "paper.output.prepare_root": {
+    "count": 1,
+    "mean_seconds": 0.0022637969814240932,
+    "total_seconds": 0.0022637969814240932
+  },
+  "paper.run_single_experiment": {
+    "count": 3,
+    "mean_seconds": 72.27125193194176,
+    "total_seconds": 216.81375579582527
+  },
+  "paper.write_config": {
+    "count": 1,
+    "mean_seconds": 0.00230008689686656,
+    "total_seconds": 0.00230008689686656
+  },
+  "paper.write_runs_json": {
+    "count": 1,
+    "mean_seconds": 0.001626770943403244,
+    "total_seconds": 0.001626770943403244
+  },
+  "paper.write_summary_csv": {
+    "count": 1,
+    "mean_seconds": 0.0019542411901056767,
+    "total_seconds": 0.0019542411901056767
+  },
+  "paper.write_summary_json": {
+    "count": 1,
+    "mean_seconds": 0.0017398828640580177,
+    "total_seconds": 0.0017398828640580177
+  },
+  "train.backward_gradient": {
+    "count": 4500,
+    "mean_seconds": 0.02447481888791339,
+    "total_seconds": 110.13668499561027
+  },
+  "train.epoch_evaluate": {
+    "count": 2250,
+    "mean_seconds": 0.02895918197143409,
+    "total_seconds": 65.1581594357267
+  },
+  "train.forward_loss": {
+    "count": 2259,
+    "mean_seconds": 3.126024851107977e-05,
+    "total_seconds": 0.07061690138652921
+  },
+  "train.forward_predict": {
+    "count": 2259,
+    "mean_seconds": 0.030193442215128,
+    "total_seconds": 68.20698596397415
+  },
+  "train.initial_evaluate": {
+    "count": 3,
+    "mean_seconds": 0.35699900969242054,
+    "total_seconds": 1.0709970290772617
+  },
+  "train.optimizer_step": {
+    "count": 4500,
+    "mean_seconds": 5.114713476763831e-05,
+    "total_seconds": 0.2301621064543724
+  },
+  "train.threshold_update": {
+    "count": 2250,
+    "mean_seconds": 0.014674316383898258,
+    "total_seconds": 33.01721186377108
+  }
+}

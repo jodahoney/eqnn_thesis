@@ -1,2 +1,0 @@
-Running "module reset". Resetting modules to system default. The following $MODULEPATH directories have been removed: None
-[2026-03-28T12:25:34.191] error: *** JOB 19643048 ON sh02-06n58 CANCELLED AT 2026-03-28T12:25:34 DUE TO TIME LIMIT ***

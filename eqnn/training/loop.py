@@ -115,22 +115,19 @@ class Trainer:
         profile: RuntimeProfile | None = None,
     ) -> dict[str, float]:
         with timed(profile, "train.forward_predict"):
-            probabilities = model.predict_batch(dataset.states, parameters=parameters)
+            probabilities = np.asarray(
+                model.predict_batch(dataset.states, parameters=parameters),
+                dtype=np.float64,
+            )
 
-        if hasattr(model, "predict_labels_batch"):
-            with timed(profile, "train.forward_predict_labels"):
-                predictions = np.asarray(
-                    model.predict_labels_batch(dataset.states, parameters=parameters),
-                    dtype=np.int64,
-                )
-        else:
-            predictions = (probabilities >= self.config.classification_threshold).astype(np.int64)
+        threshold = self._current_threshold(model)
+        predictions = (probabilities >= threshold).astype(np.int64)
 
-        labels = dataset.labels.astype(np.int64)
-        accuracy = float(np.mean(predictions == labels))
+        labels_int = dataset.labels.astype(np.int64)
+        accuracy = float(np.mean(predictions == labels_int))
 
         with timed(profile, "train.forward_loss"):
-            loss = self._objective_loss(model, dataset.states, dataset.labels, parameters)
+            loss = self._loss_from_probabilities(probabilities, dataset.labels)
 
         return {"loss": float(loss), "accuracy": accuracy}
 
@@ -317,10 +314,26 @@ class Trainer:
                 return float(model.loss(states, labels, parameters=parameters))
 
         probabilities = np.asarray(model.predict_batch(states, parameters=parameters), dtype=np.float64)
+        return self._loss_from_probabilities(probabilities, labels)
+
+    def _loss_from_probabilities(
+        self,
+        probabilities: np.ndarray,
+        labels: np.ndarray,
+    ) -> float:
+        probs = np.asarray(probabilities, dtype=np.float64)
         labels_array = np.asarray(labels, dtype=np.float64)
+
         if self.config.loss == "mse":
-            return float(np.mean((probabilities - labels_array) ** 2))
-        return float(model.binary_cross_entropy(states, labels_array, parameters=parameters))
+            return float(np.mean((probs - labels_array) ** 2))
+
+        clipped = np.clip(probs, 1e-12, 1.0 - 1e-12)
+        return float(
+            -np.mean(
+                labels_array * np.log(clipped)
+                + (1.0 - labels_array) * np.log(1.0 - clipped)
+            )
+        )
 
     def _iter_minibatch_indices(
         self,

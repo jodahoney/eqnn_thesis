@@ -1,0 +1,32 @@
+[
+  {
+    "classification_threshold": 0.485356617587419,
+    "dataset_cache_dir": "/scratch/users/jdehoney/eqnn_thesis/data/cache/paper_reproduction/c62ded78f3a48e001757",
+    "dataset_cache_hit": true,
+    "output_dir": "/scratch/users/jdehoney/eqnn_thesis/data/reproduction/paper_reproduction_19973403/n8/train_size_2/experiments/train_size_2/seed_0",
+    "seed": 0,
+    "test_accuracy": 0.92,
+    "test_loss": 0.18108086793369282,
+    "train_size": 2
+  },
+  {
+    "classification_threshold": 0.4853566179690002,
+    "dataset_cache_dir": "/scratch/users/jdehoney/eqnn_thesis/data/cache/paper_reproduction/c62ded78f3a48e001757",
+    "dataset_cache_hit": true,
+    "output_dir": "/scratch/users/jdehoney/eqnn_thesis/data/reproduction/paper_reproduction_19973403/n8/train_size_2/experiments/train_size_2/seed_1",
+    "seed": 1,
+    "test_accuracy": 0.92,
+    "test_loss": 0.18108086791405215,
+    "train_size": 2
+  },
+  {
+    "classification_threshold": 0.48535661743705727,
+    "dataset_cache_dir": "/scratch/users/jdehoney/eqnn_thesis/data/cache/paper_reproduction/c62ded78f3a48e001757",
+    "dataset_cache_hit": true,
+    "output_dir": "/scratch/users/jdehoney/eqnn_thesis/data/reproduction/paper_reproduction_19973403/n8/train_size_2/experiments/train_size_2/seed_2",
+    "seed": 2,
+    "test_accuracy": 0.92,
+    "test_loss": 0.18108086791588093,
+    "train_size": 2
+  }
+]

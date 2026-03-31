@@ -3,6 +3,12 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# keep out general slurm logs
+logs/slurm/*
+!logs/slurm/.gitkeep
+
+# keep out 
+
 # C extensions
 *.so
 

@@ -1,0 +1,17 @@
+[
+  {
+    "mean_test_accuracy": 1.0,
+    "mean_test_loss": 0.1551355151534881,
+    "mean_threshold": 0.4474241816972498,
+    "mean_train_accuracy": 1.0,
+    "mean_train_loss": 0.15325513533080395,
+    "num_runs": 3,
+    "phase_diagram_path": "/scratch/users/jdehoney/eqnn_thesis/data/reproduction/paper_reproduction_19824192/n8/train_size_12/phase_diagrams/train_size_12_phase_diagram.npz",
+    "train_size": 12,
+    "variance_test_accuracy": 0.0,
+    "variance_test_loss": 0.0013190851748010627,
+    "variance_threshold": 3.480010143398625e-05,
+    "variance_train_accuracy": 0.0,
+    "variance_train_loss": 0.001433701817245773
+  }
+]

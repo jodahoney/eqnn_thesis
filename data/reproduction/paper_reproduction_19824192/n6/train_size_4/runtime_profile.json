@@ -1,0 +1,147 @@
+{
+  "experiment.build_model": {
+    "count": 3,
+    "mean_seconds": 0.00015319914867480597,
+    "total_seconds": 0.0004595974460244179
+  },
+  "experiment.build_trainer": {
+    "count": 3,
+    "mean_seconds": 2.2162372867266336e-06,
+    "total_seconds": 6.648711860179901e-06
+  },
+  "experiment.final_test_evaluate": {
+    "count": 3,
+    "mean_seconds": 0.7673924903695782,
+    "total_seconds": 2.3021774711087346
+  },
+  "experiment.final_train_evaluate": {
+    "count": 3,
+    "mean_seconds": 0.030531248077750206,
+    "total_seconds": 0.09159374423325062
+  },
+  "experiment.prepare_output_dir": {
+    "count": 3,
+    "mean_seconds": 0.001502695493400097,
+    "total_seconds": 0.004508086480200291
+  },
+  "experiment.test_predict": {
+    "count": 3,
+    "mean_seconds": 0.5091219913835326,
+    "total_seconds": 1.527365974150598
+  },
+  "experiment.train_fit": {
+    "count": 3,
+    "mean_seconds": 37.49532736092806,
+    "total_seconds": 112.48598208278418
+  },
+  "experiment.train_predict": {
+    "count": 3,
+    "mean_seconds": 0.020458461095889408,
+    "total_seconds": 0.06137538328766823
+  },
+  "experiment.write_artifacts": {
+    "count": 3,
+    "mean_seconds": 0.008966492488980293,
+    "total_seconds": 0.02689947746694088
+  },
+  "io.load_dataset_bundle": {
+    "count": 1,
+    "mean_seconds": 0.017945528961718082,
+    "total_seconds": 0.017945528961718082
+  },
+  "io.save_dataset_bundle": {
+    "count": 1,
+    "mean_seconds": 0.016298329457640648,
+    "total_seconds": 0.016298329457640648
+  },
+  "paper.aggregate_train_size": {
+    "count": 1,
+    "mean_seconds": 0.010934077203273773,
+    "total_seconds": 0.010934077203273773
+  },
+  "paper.cache.dataset_load": {
+    "count": 1,
+    "mean_seconds": 0.017957880161702633,
+    "total_seconds": 0.017957880161702633
+  },
+  "paper.dataset.acquire": {
+    "count": 1,
+    "mean_seconds": 0.019671518355607986,
+    "total_seconds": 0.019671518355607986
+  },
+  "paper.dataset.save_output_copy": {
+    "count": 1,
+    "mean_seconds": 0.016311747953295708,
+    "total_seconds": 0.016311747953295708
+  },
+  "paper.output.prepare_root": {
+    "count": 1,
+    "mean_seconds": 0.0016056951135396957,
+    "total_seconds": 0.0016056951135396957
+  },
+  "paper.run_single_experiment": {
+    "count": 3,
+    "mean_seconds": 38.852737513681255,
+    "total_seconds": 116.55821254104376
+  },
+  "paper.write_config": {
+    "count": 1,
+    "mean_seconds": 0.0023173708468675613,
+    "total_seconds": 0.0023173708468675613
+  },
+  "paper.write_runs_json": {
+    "count": 1,
+    "mean_seconds": 0.002232547849416733,
+    "total_seconds": 0.002232547849416733
+  },
+  "paper.write_summary_csv": {
+    "count": 1,
+    "mean_seconds": 0.0026038018986582756,
+    "total_seconds": 0.0026038018986582756
+  },
+  "paper.write_summary_json": {
+    "count": 1,
+    "mean_seconds": 0.0021250443533062935,
+    "total_seconds": 0.0021250443533062935
+  },
+  "train.backward_gradient": {
+    "count": 4500,
+    "mean_seconds": 0.007040418199160033,
+    "total_seconds": 31.681881896220148
+  },
+  "train.epoch_evaluate": {
+    "count": 2250,
+    "mean_seconds": 0.030528893009656007,
+    "total_seconds": 68.69000927172601
+  },
+  "train.forward_loss": {
+    "count": 2259,
+    "mean_seconds": 0.010505205558323528,
+    "total_seconds": 23.73125935625285
+  },
+  "train.forward_predict": {
+    "count": 2259,
+    "mean_seconds": 0.010482134144124916,
+    "total_seconds": 23.679141031578183
+  },
+  "train.forward_predict_labels": {
+    "count": 2259,
+    "mean_seconds": 0.010485306803109029,
+    "total_seconds": 23.686308068223298
+  },
+  "train.initial_evaluate": {
+    "count": 3,
+    "mean_seconds": 0.04356708936393261,
+    "total_seconds": 0.13070126809179783
+  },
+  "train.optimizer_step": {
+    "count": 4500,
+    "mean_seconds": 3.1176209449768064e-05,
+    "total_seconds": 0.1402929425239563
+  },
+  "train.threshold_update": {
+    "count": 2250,
+    "mean_seconds": 0.0051656846122609245,
+    "total_seconds": 11.62279037758708
+  }
+}

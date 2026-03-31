@@ -1,2 +1,0 @@
-Running "module reset". Resetting modules to system default. The following $MODULEPATH directories have been removed: None
-srun: fatal: cpus-per-task set by two different environment variables SLURM_CPUS_PER_TASK=5 != SLURM_TRES_PER_TASK=cpu=4

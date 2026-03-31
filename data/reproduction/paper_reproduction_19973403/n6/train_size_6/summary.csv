@@ -1,0 +1,2 @@
+train_size,num_runs,mean_train_accuracy,variance_train_accuracy,mean_test_accuracy,variance_test_accuracy,mean_train_loss,variance_train_loss,mean_test_loss,variance_test_loss,mean_threshold,variance_threshold,phase_diagram_path
+6,3,1.0,0.0,1.0,0.0,0.10395270318295209,3.8127308080063616e-13,0.11042564352866861,7.570553901774239e-12,0.42981351521400485,3.836772041822941e-08,/scratch/users/jdehoney/eqnn_thesis/data/reproduction/paper_reproduction_19973403/n6/train_size_6/phase_diagrams/train_size_6_phase_diagram.npz

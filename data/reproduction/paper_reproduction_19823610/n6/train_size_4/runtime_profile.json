@@ -1,0 +1,147 @@
+{
+  "experiment.build_model": {
+    "count": 3,
+    "mean_seconds": 0.00013259891420602798,
+    "total_seconds": 0.00039779674261808395
+  },
+  "experiment.build_trainer": {
+    "count": 3,
+    "mean_seconds": 2.0551184813181558e-06,
+    "total_seconds": 6.165355443954468e-06
+  },
+  "experiment.final_test_evaluate": {
+    "count": 3,
+    "mean_seconds": 0.7494318181027969,
+    "total_seconds": 2.2482954543083906
+  },
+  "experiment.final_train_evaluate": {
+    "count": 3,
+    "mean_seconds": 0.03043226432055235,
+    "total_seconds": 0.09129679296165705
+  },
+  "experiment.prepare_output_dir": {
+    "count": 3,
+    "mean_seconds": 0.009553742284576098,
+    "total_seconds": 0.028661226853728294
+  },
+  "experiment.test_predict": {
+    "count": 3,
+    "mean_seconds": 0.49823089099178713,
+    "total_seconds": 1.4946926729753613
+  },
+  "experiment.train_fit": {
+    "count": 3,
+    "mean_seconds": 37.836755101569,
+    "total_seconds": 113.51026530470699
+  },
+  "experiment.train_predict": {
+    "count": 3,
+    "mean_seconds": 0.019926858755449455,
+    "total_seconds": 0.05978057626634836
+  },
+  "experiment.write_artifacts": {
+    "count": 3,
+    "mean_seconds": 0.009099539369344711,
+    "total_seconds": 0.027298618108034134
+  },
+  "io.load_dataset_bundle": {
+    "count": 1,
+    "mean_seconds": 0.017267318442463875,
+    "total_seconds": 0.017267318442463875
+  },
+  "io.save_dataset_bundle": {
+    "count": 1,
+    "mean_seconds": 0.02909459639340639,
+    "total_seconds": 0.02909459639340639
+  },
+  "paper.aggregate_train_size": {
+    "count": 1,
+    "mean_seconds": 0.01652600336819887,
+    "total_seconds": 0.01652600336819887
+  },
+  "paper.cache.dataset_load": {
+    "count": 1,
+    "mean_seconds": 0.01727790292352438,
+    "total_seconds": 0.01727790292352438
+  },
+  "paper.dataset.acquire": {
+    "count": 1,
+    "mean_seconds": 0.018130380660295486,
+    "total_seconds": 0.018130380660295486
+  },
+  "paper.dataset.save_output_copy": {
+    "count": 1,
+    "mean_seconds": 0.029106488451361656,
+    "total_seconds": 0.029106488451361656
+  },
+  "paper.output.prepare_root": {
+    "count": 1,
+    "mean_seconds": 0.0021199313923716545,
+    "total_seconds": 0.0021199313923716545
+  },
+  "paper.run_single_experiment": {
+    "count": 3,
+    "mean_seconds": 39.17194176930934,
+    "total_seconds": 117.51582530792803
+  },
+  "paper.write_config": {
+    "count": 1,
+    "mean_seconds": 0.006209332495927811,
+    "total_seconds": 0.006209332495927811
+  },
+  "paper.write_runs_json": {
+    "count": 1,
+    "mean_seconds": 0.0029400652274489403,
+    "total_seconds": 0.0029400652274489403
+  },
+  "paper.write_summary_csv": {
+    "count": 1,
+    "mean_seconds": 0.002115149050951004,
+    "total_seconds": 0.002115149050951004
+  },
+  "paper.write_summary_json": {
+    "count": 1,
+    "mean_seconds": 0.0023901555687189102,
+    "total_seconds": 0.0023901555687189102
+  },
+  "train.backward_gradient": {
+    "count": 4500,
+    "mean_seconds": 0.007099810282803244,
+    "total_seconds": 31.9491462726146
+  },
+  "train.epoch_evaluate": {
+    "count": 2250,
+    "mean_seconds": 0.03083233465295699,
+    "total_seconds": 69.37275296915323
+  },
+  "train.forward_loss": {
+    "count": 2259,
+    "mean_seconds": 0.010607037586483637,
+    "total_seconds": 23.961297907866538
+  },
+  "train.forward_predict": {
+    "count": 2259,
+    "mean_seconds": 0.010571918726930475,
+    "total_seconds": 23.881964404135942
+  },
+  "train.forward_predict_labels": {
+    "count": 2259,
+    "mean_seconds": 0.010568557906155435,
+    "total_seconds": 23.87437231000513
+  },
+  "train.initial_evaluate": {
+    "count": 3,
+    "mean_seconds": 0.03919351100921631,
+    "total_seconds": 0.11758053302764893
+  },
+  "train.optimizer_step": {
+    "count": 4500,
+    "mean_seconds": 3.0347807332873344e-05,
+    "total_seconds": 0.13656513299793005
+  },
+  "train.threshold_update": {
+    "count": 2250,
+    "mean_seconds": 0.005215925585892465,
+    "total_seconds": 11.735832568258047
+  }
+}

@@ -1,0 +1,147 @@
+{
+  "experiment.build_model": {
+    "count": 3,
+    "mean_seconds": 0.0001471061259508133,
+    "total_seconds": 0.0004413183778524399
+  },
+  "experiment.build_trainer": {
+    "count": 3,
+    "mean_seconds": 2.3758038878440857e-06,
+    "total_seconds": 7.127411663532257e-06
+  },
+  "experiment.final_test_evaluate": {
+    "count": 3,
+    "mean_seconds": 0.8521185054754218,
+    "total_seconds": 2.5563555164262652
+  },
+  "experiment.final_train_evaluate": {
+    "count": 3,
+    "mean_seconds": 0.017209293010334175,
+    "total_seconds": 0.05162787903100252
+  },
+  "experiment.prepare_output_dir": {
+    "count": 3,
+    "mean_seconds": 0.0015698457136750221,
+    "total_seconds": 0.004709537141025066
+  },
+  "experiment.test_predict": {
+    "count": 3,
+    "mean_seconds": 0.5676925542453924,
+    "total_seconds": 1.7030776627361774
+  },
+  "experiment.train_fit": {
+    "count": 3,
+    "mean_seconds": 23.142261868342757,
+    "total_seconds": 69.42678560502827
+  },
+  "experiment.train_predict": {
+    "count": 3,
+    "mean_seconds": 0.011381478048861027,
+    "total_seconds": 0.03414443414658308
+  },
+  "experiment.write_artifacts": {
+    "count": 3,
+    "mean_seconds": 0.00889828490714232,
+    "total_seconds": 0.026694854721426964
+  },
+  "io.load_dataset_bundle": {
+    "count": 1,
+    "mean_seconds": 0.018483399413526058,
+    "total_seconds": 0.018483399413526058
+  },
+  "io.save_dataset_bundle": {
+    "count": 1,
+    "mean_seconds": 0.01753989513963461,
+    "total_seconds": 0.01753989513963461
+  },
+  "paper.aggregate_train_size": {
+    "count": 1,
+    "mean_seconds": 0.010456424206495285,
+    "total_seconds": 0.010456424206495285
+  },
+  "paper.cache.dataset_load": {
+    "count": 1,
+    "mean_seconds": 0.018497365526854992,
+    "total_seconds": 0.018497365526854992
+  },
+  "paper.dataset.acquire": {
+    "count": 1,
+    "mean_seconds": 0.02039357740432024,
+    "total_seconds": 0.02039357740432024
+  },
+  "paper.dataset.save_output_copy": {
+    "count": 1,
+    "mean_seconds": 0.017554180696606636,
+    "total_seconds": 0.017554180696606636
+  },
+  "paper.output.prepare_root": {
+    "count": 1,
+    "mean_seconds": 0.001877560280263424,
+    "total_seconds": 0.001877560280263424
+  },
+  "paper.run_single_experiment": {
+    "count": 3,
+    "mean_seconds": 24.621246829939384,
+    "total_seconds": 73.86374048981816
+  },
+  "paper.write_config": {
+    "count": 1,
+    "mean_seconds": 0.0024683084338903427,
+    "total_seconds": 0.0024683084338903427
+  },
+  "paper.write_runs_json": {
+    "count": 1,
+    "mean_seconds": 0.0020132875069975853,
+    "total_seconds": 0.0020132875069975853
+  },
+  "paper.write_summary_csv": {
+    "count": 1,
+    "mean_seconds": 0.002027980051934719,
+    "total_seconds": 0.002027980051934719
+  },
+  "paper.write_summary_json": {
+    "count": 1,
+    "mean_seconds": 0.0023686327040195465,
+    "total_seconds": 0.0023686327040195465
+  },
+  "train.backward_gradient": {
+    "count": 2250,
+    "mean_seconds": 0.007855689944906367,
+    "total_seconds": 17.675302376039326
+  },
+  "train.epoch_evaluate": {
+    "count": 2250,
+    "mean_seconds": 0.017111568570964866,
+    "total_seconds": 38.50102928467095
+  },
+  "train.forward_loss": {
+    "count": 2259,
+    "mean_seconds": 0.006077723476199673,
+    "total_seconds": 13.729577332735062
+  },
+  "train.forward_predict": {
+    "count": 2259,
+    "mean_seconds": 0.006044320776586962,
+    "total_seconds": 13.654120634309947
+  },
+  "train.forward_predict_labels": {
+    "count": 2259,
+    "mean_seconds": 0.006050924419278247,
+    "total_seconds": 13.66903826314956
+  },
+  "train.initial_evaluate": {
+    "count": 3,
+    "mean_seconds": 0.024354576133191586,
+    "total_seconds": 0.07306372839957476
+  },
+  "train.optimizer_step": {
+    "count": 2250,
+    "mean_seconds": 3.651150936881701e-05,
+    "total_seconds": 0.08215089607983828
+  },
+  "train.threshold_update": {
+    "count": 2250,
+    "mean_seconds": 0.005759927901128928,
+    "total_seconds": 12.959837777540088
+  }
+}
