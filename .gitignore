@@ -7,8 +7,6 @@ __pycache__/
 logs/slurm/*
 !logs/slurm/.gitkeep
 
-# keep out 
-
 # C extensions
 *.so
 
