@@ -13,7 +13,7 @@ from eqnn.types import ComplexArray, RealArray
 _CZ_GATE = np.diag((1.0, 1.0, 1.0, -1.0)).astype(np.complex128)
 
 
-def _coerce_block_parameters(parameters: tuple[float, ...] | Iterable[float]) -> RealArray:
+def _as_parameter_array(parameters: tuple[float, ...] | Iterable[float]) -> RealArray:
     if len(parameters) == 1 and not np.isscalar(parameters[0]):  # type: ignore[index]
         return np.asarray(list(parameters[0]), dtype=np.float64)  # type: ignore[index]
     return np.asarray(parameters, dtype=np.float64)
@@ -137,11 +137,15 @@ class HEAConvolution:
         return gate
 
     @classmethod
+    def block(cls, *parameters: float) -> ComplexArray:
+        return cls.gate(*parameters)
+
+    @classmethod
     def gate_and_derivatives(
         cls,
         *parameters: float,
     ) -> tuple[ComplexArray, tuple[ComplexArray, ...]]:
-        parameter_array = _coerce_block_parameters(parameters)
+        parameter_array = _as_parameter_array(parameters)
         if parameter_array.shape != (8,):
             raise ValueError(f"Expected 8 HEA block parameters, got shape {parameter_array.shape}")
 
