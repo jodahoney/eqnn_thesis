@@ -6,7 +6,14 @@ import numpy as np
 
 from eqnn.backends import NumpyPureStateBackend
 from eqnn.datasets.heisenberg import DatasetSplit, HeisenbergDatasetConfig, generate_dataset
-from eqnn.models import BaselineQCNN, BaselineQCNNConfig, QCNNConfig, SU2QCNN
+from eqnn.models import (
+    BaselineQCNN,
+    BaselineQCNNConfig,
+    HEAQCNN,
+    HEAQCNNConfig,
+    QCNNConfig,
+    SU2QCNN,
+)
 from eqnn.training import Trainer, TrainingConfig
 
 
@@ -86,6 +93,19 @@ class ExactGradientTests(unittest.TestCase):
         finite_difference_trainer = Trainer(
             TrainingConfig(loss="mse", gradient_backend="finite_difference")
         )
+
+        exact_gradient = exact_trainer.gradient(model, dataset)
+        finite_difference_gradient = finite_difference_trainer.gradient(model, dataset)
+
+        np.testing.assert_allclose(exact_gradient, finite_difference_gradient, atol=1e-5)
+
+    def test_hea_swap_exact_gradient_matches_finite_difference(self) -> None:
+        dataset = self._combined_dataset(num_qubits=4, num_points=5, split_seed=6)
+        parameters = np.linspace(-0.15, 0.25, 24)
+        model = HEAQCNN(HEAQCNNConfig(num_qubits=4), parameters=parameters)
+
+        exact_trainer = Trainer(TrainingConfig(gradient_backend="exact"))
+        finite_difference_trainer = Trainer(TrainingConfig(gradient_backend="finite_difference"))
 
         exact_gradient = exact_trainer.gradient(model, dataset)
         finite_difference_gradient = finite_difference_trainer.gradient(model, dataset)

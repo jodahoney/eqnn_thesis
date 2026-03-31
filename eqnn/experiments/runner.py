@@ -12,7 +12,15 @@ import numpy as np
 
 from eqnn.datasets.heisenberg import DatasetBundle, HeisenbergDatasetConfig, generate_dataset
 from eqnn.datasets.io import load_dataset_bundle, save_dataset_bundle
-from eqnn.models import BaselineQCNN, BaselineQCNNConfig, QCNNConfig, SU2QCNN, TrainableModel
+from eqnn.models import (
+    BaselineQCNN,
+    BaselineQCNNConfig,
+    HEAQCNN,
+    HEAQCNNConfig,
+    QCNNConfig,
+    SU2QCNN,
+    TrainableModel,
+)
 from eqnn.training import Trainer, TrainingConfig
 from eqnn.utils.timing import RuntimeProfile, timed
 
@@ -30,8 +38,8 @@ class ExperimentConfig:
     readout_mode: str = "swap"
 
     def __post_init__(self) -> None:
-        if self.model_family not in {"su2_qcnn", "baseline_qcnn"}:
-            raise ValueError("model_family must be 'su2_qcnn' or 'baseline_qcnn'")
+        if self.model_family not in {"su2_qcnn", "baseline_qcnn", "hea_qcnn"}:
+            raise ValueError("model_family must be 'su2_qcnn', 'baseline_qcnn', or 'hea_qcnn'")
 
 
 @dataclass(frozen=True)
@@ -74,8 +82,23 @@ def build_model(
             parameters=parameters,
         )
 
-    return BaselineQCNN(
-        BaselineQCNNConfig(
+    if config.model_family == "baseline_qcnn":
+        return BaselineQCNN(
+            BaselineQCNNConfig(
+                num_qubits=config.num_qubits,
+                min_readout_qubits=config.min_readout_qubits,
+                boundary=config.boundary,
+                parity_sequence=config.parity_sequence,
+                shared_convolution_parameter=config.shared_convolution_parameter,
+                pooling_mode=config.pooling_mode,
+                pooling_keep=config.pooling_keep,
+                readout_mode=config.readout_mode,
+            ),
+            parameters=parameters,
+        )
+
+    return HEAQCNN(
+        HEAQCNNConfig(
             num_qubits=config.num_qubits,
             min_readout_qubits=config.min_readout_qubits,
             boundary=config.boundary,
