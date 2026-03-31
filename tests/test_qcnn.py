@@ -4,6 +4,7 @@ import unittest
 
 import numpy as np
 
+from eqnn.backends import NumpyPureStateBackend
 from eqnn.models.qcnn import QCNNConfig, SU2QCNN
 from eqnn.physics.heisenberg import BondAlternatingHeisenbergHamiltonian
 from eqnn.physics.observables import SINGLET_STATE
@@ -71,6 +72,28 @@ class SU2QCNNTests(unittest.TestCase):
         labels = model.predict_labels_batch(np.stack([low_ratio_state, high_ratio_state], axis=0))
 
         self.assertEqual(labels.tolist(), [0, 1])
+
+    def test_explicit_numpy_backend_matches_default_forward_outputs(self) -> None:
+        hamiltonian = BondAlternatingHeisenbergHamiltonian(num_qubits=4)
+        _, state = hamiltonian.ground_state(0.6)
+        parameters = np.asarray((0.2, -0.15, 0.1), dtype=np.float64)
+
+        default_model = SU2QCNN(QCNNConfig(num_qubits=4), parameters=parameters)
+        explicit_backend_model = SU2QCNN(
+            QCNNConfig(num_qubits=4),
+            parameters=parameters,
+            backend=NumpyPureStateBackend(),
+        )
+
+        default_forward = default_model.forward(state)
+        explicit_forward = explicit_backend_model.forward(state)
+
+        np.testing.assert_allclose(
+            explicit_forward.final_density_matrix,
+            default_forward.final_density_matrix,
+            atol=1e-12,
+        )
+        self.assertAlmostEqual(explicit_forward.probability, default_forward.probability, places=12)
 
     def test_legacy_dimerization_readout_tracks_bond_dimerization(self) -> None:
         hamiltonian = BondAlternatingHeisenbergHamiltonian(num_qubits=4)

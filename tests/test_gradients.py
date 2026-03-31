@@ -4,6 +4,7 @@ import unittest
 
 import numpy as np
 
+from eqnn.backends import NumpyPureStateBackend
 from eqnn.datasets.heisenberg import DatasetSplit, HeisenbergDatasetConfig, generate_dataset
 from eqnn.models import BaselineQCNN, BaselineQCNNConfig, QCNNConfig, SU2QCNN
 from eqnn.training import Trainer, TrainingConfig
@@ -90,3 +91,28 @@ class ExactGradientTests(unittest.TestCase):
         finite_difference_gradient = finite_difference_trainer.gradient(model, dataset)
 
         np.testing.assert_allclose(exact_gradient, finite_difference_gradient, atol=1e-5)
+
+    def test_trainer_falls_back_when_backend_lacks_exact_gradients(self) -> None:
+        class NoExactGradientBackend(NumpyPureStateBackend):
+            @property
+            def supports_exact_gradients(self) -> bool:
+                return False
+
+            def loss_gradient(self, *args, **kwargs) -> np.ndarray:
+                raise NotImplementedError
+
+        dataset = self._combined_dataset(num_qubits=4, num_points=5, split_seed=5)
+        parameters = np.asarray((0.12, -0.08, 0.17), dtype=np.float64)
+        model = SU2QCNN(
+            QCNNConfig(num_qubits=4),
+            parameters=parameters,
+            backend=NoExactGradientBackend(),
+        )
+
+        auto_trainer = Trainer(TrainingConfig(gradient_backend="auto"))
+        finite_difference_trainer = Trainer(TrainingConfig(gradient_backend="finite_difference"))
+
+        auto_gradient = auto_trainer.gradient(model, dataset)
+        finite_difference_gradient = finite_difference_trainer.gradient(model, dataset)
+
+        np.testing.assert_allclose(auto_gradient, finite_difference_gradient, atol=1e-5)

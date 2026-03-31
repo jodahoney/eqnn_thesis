@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from eqnn.datasets.heisenberg import DatasetBundle, DatasetSplit
+from eqnn.models.base import TrainableModel
 from eqnn.utils.timing import RuntimeProfile, timed
 
 
@@ -70,7 +71,7 @@ class Trainer:
 
     def fit(
         self,
-        model: object,
+        model: TrainableModel,
         dataset: DatasetSplit | DatasetBundle,
         *,
         profile: RuntimeProfile | None = None,
@@ -108,7 +109,7 @@ class Trainer:
 
     def evaluate(
         self,
-        model: object,
+        model: TrainableModel,
         dataset: DatasetSplit,
         *,
         parameters: np.ndarray | None = None,
@@ -133,7 +134,7 @@ class Trainer:
 
     def gradient(
         self,
-        model: object,
+        model: TrainableModel,
         dataset: DatasetSplit | DatasetBundle,
         *,
         parameters: np.ndarray | None = None,
@@ -163,7 +164,7 @@ class Trainer:
 
     def _fit_once(
         self,
-        model: object,
+        model: TrainableModel,
         split: DatasetSplit,
         initial_parameters: np.ndarray,
         rng: np.random.Generator,
@@ -242,7 +243,7 @@ class Trainer:
 
     def _loss_gradient(
         self,
-        model: object,
+        model: TrainableModel,
         states: np.ndarray,
         labels: np.ndarray,
         parameters: np.ndarray,
@@ -282,7 +283,7 @@ class Trainer:
 
     def _finite_difference_gradient(
         self,
-        model: object,
+        model: TrainableModel,
         states: np.ndarray,
         labels: np.ndarray,
         parameters: np.ndarray,
@@ -300,7 +301,7 @@ class Trainer:
 
     def _objective_loss(
         self,
-        model: object,
+        model: TrainableModel,
         states: np.ndarray,
         labels: np.ndarray,
         parameters: np.ndarray,
