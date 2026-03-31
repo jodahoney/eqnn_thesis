@@ -6,7 +6,7 @@ from eqnn.datasets.heisenberg import (
     HeisenbergDatasetConfig,
     generate_dataset,
 )
-from eqnn.models.qcnn import QCNNConfig, QCNNForwardPass, SU2QCNN
+from eqnn.models import QCNNConfig, QCNNForwardPass, SU2QCNN
 from eqnn.physics.heisenberg import BondAlternatingHeisenbergHamiltonian
 from eqnn.training.loop import Trainer, TrainingConfig
 

@@ -4,6 +4,7 @@ import unittest
 
 import numpy as np
 
+from eqnn.backends import NumpyPureStateBackend
 from eqnn.layers import AnisotropicConvolution, AnisotropicConvolutionConfig
 from eqnn.models import BaselineQCNN, BaselineQCNNConfig
 from eqnn.physics.heisenberg import BondAlternatingHeisenbergHamiltonian
@@ -35,6 +36,28 @@ class BaselineQCNNTests(unittest.TestCase):
         self.assertGreaterEqual(forward.probability, 0.0)
         self.assertLessEqual(forward.probability, 1.0)
         self.assertEqual(forward.final_num_qubits, 2)
+
+    def test_explicit_numpy_backend_matches_default_baseline_outputs(self) -> None:
+        hamiltonian = BondAlternatingHeisenbergHamiltonian(num_qubits=4)
+        _, state = hamiltonian.ground_state(0.6)
+        parameters = np.asarray((0.2, -0.4, 0.1, 0.3, 0.05, -0.2, -0.1, 0.25, 0.15), dtype=np.float64)
+
+        default_model = BaselineQCNN(BaselineQCNNConfig(num_qubits=4), parameters=parameters)
+        explicit_backend_model = BaselineQCNN(
+            BaselineQCNNConfig(num_qubits=4),
+            parameters=parameters,
+            backend=NumpyPureStateBackend(),
+        )
+
+        default_forward = default_model.forward(state)
+        explicit_forward = explicit_backend_model.forward(state)
+
+        np.testing.assert_allclose(
+            explicit_forward.final_density_matrix,
+            default_forward.final_density_matrix,
+            atol=1e-12,
+        )
+        self.assertAlmostEqual(explicit_forward.probability, default_forward.probability, places=12)
 
     def test_baseline_model_breaks_su2_invariance(self) -> None:
         model = BaselineQCNN(

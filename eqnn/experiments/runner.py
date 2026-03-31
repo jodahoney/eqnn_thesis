@@ -12,7 +12,7 @@ import numpy as np
 
 from eqnn.datasets.heisenberg import DatasetBundle, HeisenbergDatasetConfig, generate_dataset
 from eqnn.datasets.io import load_dataset_bundle, save_dataset_bundle
-from eqnn.models import BaselineQCNN, BaselineQCNNConfig, QCNNConfig, SU2QCNN
+from eqnn.models import BaselineQCNN, BaselineQCNNConfig, QCNNConfig, SU2QCNN, TrainableModel
 from eqnn.training import Trainer, TrainingConfig
 from eqnn.utils.timing import RuntimeProfile, timed
 
@@ -58,7 +58,7 @@ class BenchmarkSweepConfig:
 def build_model(
     config: ExperimentConfig,
     parameters: np.ndarray | None = None,
-) -> object:
+) -> TrainableModel:
     if config.model_family == "su2_qcnn":
         return SU2QCNN(
             QCNNConfig(

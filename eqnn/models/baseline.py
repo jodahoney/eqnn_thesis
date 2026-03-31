@@ -5,8 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
+from eqnn.backends import QCNNBackend
 from eqnn.layers.baseline import AnisotropicConvolution, AnisotropicConvolutionConfig
-from eqnn.models.qcnn import QCNNForwardPass, SU2QCNN
+from eqnn.models.base import QCNNForwardPass
+from eqnn.models.qcnn import BaseQCNNModel, QCNNConfig
 
 
 @dataclass(frozen=True)
@@ -43,35 +45,44 @@ class BaselineQCNNConfig:
             raise ValueError("pooling_mode must be 'partial_trace' or 'equivariant'")
 
 
-class BaselineQCNN(SU2QCNN):
+class BaselineQCNN(BaseQCNNModel):
     """QCNN baseline that uses anisotropic, non-equivariant convolutions."""
 
     def __init__(
         self,
         config: BaselineQCNNConfig,
         parameters: Iterable[float] | None = None,
+        backend: QCNNBackend | None = None,
     ) -> None:
-        self.config = config
-        self.block_num_qubits = self._build_block_num_qubits()
-        self.convolutions = [
+        qcnn_config = QCNNConfig(
+            num_qubits=config.num_qubits,
+            min_readout_qubits=config.min_readout_qubits,
+            boundary=config.boundary,
+            parity_sequence=config.parity_sequence,
+            shared_convolution_parameter=config.shared_convolution_parameter,
+            pooling_mode=config.pooling_mode,
+            pooling_keep=config.pooling_keep,
+            readout_mode=config.readout_mode,
+            symmetry_group=config.symmetry_group,
+        )
+        block_num_qubits = self.build_block_num_qubits(qcnn_config)
+        convolutions = [
             AnisotropicConvolution(
                 AnisotropicConvolutionConfig(
                     num_qubits=num_qubits,
-                    parity_sequence=self.config.parity_sequence,
-                    shared_parameter=self.config.shared_convolution_parameter,
+                    parity_sequence=config.parity_sequence,
+                    shared_parameter=config.shared_convolution_parameter,
                 )
             )
-            for num_qubits in self.block_num_qubits
+            for num_qubits in block_num_qubits
         ]
-        self.poolings = [
-            self._build_pooling(num_qubits)
-            for num_qubits in self.block_num_qubits[:-1]
-        ]
-        self._convolution_slices = self._build_convolution_slices()
-        self._pooling_slices = self._build_pooling_slices()
-        self._readout_slice = self._build_readout_slice()
-        self.parameters = self._initialize_parameters(parameters)
-        self.classification_threshold = 0.5
+        super().__init__(
+            qcnn_config,
+            block_num_qubits=block_num_qubits,
+            convolutions=convolutions,
+            backend=backend,
+            parameters=parameters,
+        )
 
 
 __all__ = ["BaselineQCNN", "BaselineQCNNConfig", "QCNNForwardPass"]
