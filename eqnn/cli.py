@@ -83,7 +83,7 @@ def build_parser() -> argparse.ArgumentParser:
     sweep_parser.add_argument(
         "--model-families",
         nargs="+",
-        choices=("su2_qcnn", "baseline_qcnn"),
+        choices=("su2_qcnn", "baseline_qcnn", "hea_qcnn"),
         default=("su2_qcnn", "baseline_qcnn"),
     )
     sweep_parser.add_argument(
@@ -155,7 +155,7 @@ def build_parser() -> argparse.ArgumentParser:
     summary_parser.add_argument("--num-qubits", type=int, default=None)
     summary_parser.add_argument(
         "--model-family",
-        choices=("su2_qcnn", "baseline_qcnn"),
+        choices=("su2_qcnn", "baseline_qcnn", "hea_qcnn"),
         default=None,
     )
     summary_parser.add_argument(
@@ -395,7 +395,7 @@ def _add_dataset_loading_or_generation_args(parser: argparse.ArgumentParser) -> 
 def _add_model_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--model-family",
-        choices=("su2_qcnn", "baseline_qcnn"),
+        choices=("su2_qcnn", "baseline_qcnn", "hea_qcnn"),
         default="su2_qcnn",
     )
     parser.add_argument("--min-readout-qubits", type=int, default=None)
