@@ -1,0 +1,16 @@
+{
+  "classification_threshold": 0.5496357975267927,
+  "epochs": 50,
+  "experiment_name": "calibration_hea_qcnn_n6_train6_epochs50_seed1",
+  "job_index": 151,
+  "model_family": "hea_qcnn",
+  "num_qubits": 6,
+  "output_dir": "/scratch/users/jdehoney/eqnn_thesis/data/comparisons/eqnn_vs_hea_50ep_20247287/hea_qcnn/n6/train_size_6/epochs_50/seed_1",
+  "runtime_seconds": 13.201378900557756,
+  "seed": 1,
+  "test_accuracy": 1.0,
+  "test_loss": 0.1451253169720225,
+  "train_accuracy": 1.0,
+  "train_loss": 0.14164746095998362,
+  "train_size": 6
+}

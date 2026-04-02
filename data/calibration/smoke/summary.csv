@@ -1,0 +1,2 @@
+model_family,num_qubits,train_size,epochs,num_runs,mean_train_accuracy,variance_train_accuracy,mean_test_accuracy,variance_test_accuracy,mean_train_loss,variance_train_loss,mean_test_loss,variance_test_loss,mean_classification_threshold,variance_classification_threshold,mean_runtime_seconds,variance_runtime_seconds
+su2_qcnn,6,12,50,1,1.0,0.0,1.0,0.0,0.10769898390211324,0.0,0.1104182275865362,0.0,0.4357045312295753,0.0,11.507464196532965,0.0

@@ -1,0 +1,37 @@
+{
+  "batch_size": 2,
+  "boundary": "open",
+  "critical_ratio": 1.0,
+  "dense_test_points": 101,
+  "eigensolver": "auto",
+  "epochs_values": [
+    50
+  ],
+  "gradient_backend": "exact",
+  "initialization_noise_scale": 0.05,
+  "initialization_strategy": "noisy_current",
+  "learning_rate": 0.05,
+  "left_ratio_min": 0.0,
+  "loss": "mse",
+  "model_families": [
+    "su2_qcnn",
+    "hea_qcnn"
+  ],
+  "num_qubits_values": [
+    6
+  ],
+  "optimizer": "adam",
+  "pooling_keep": "left",
+  "pooling_mode": "partial_trace",
+  "random_seeds": [
+    0
+  ],
+  "readout_mode": "swap",
+  "right_ratio_max": 2.0,
+  "shared_convolution_parameter": true,
+  "threshold_critical_ratio": 1.0,
+  "threshold_update": "paper_nearest_critical",
+  "train_sizes": [
+    12
+  ]
+}

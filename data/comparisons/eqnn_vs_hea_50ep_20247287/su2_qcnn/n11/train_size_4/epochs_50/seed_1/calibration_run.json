@@ -1,0 +1,16 @@
+{
+  "classification_threshold": 0.5598565341485948,
+  "epochs": 50,
+  "experiment_name": "calibration_su2_qcnn_n11_train4_epochs50_seed1",
+  "job_index": 94,
+  "model_family": "su2_qcnn",
+  "num_qubits": 11,
+  "output_dir": "/scratch/users/jdehoney/eqnn_thesis/data/comparisons/eqnn_vs_hea_50ep_20247287/su2_qcnn/n11/train_size_4/epochs_50/seed_1",
+  "runtime_seconds": 8164.64577194117,
+  "seed": 1,
+  "test_accuracy": 0.99,
+  "test_loss": 0.16062407238125626,
+  "train_accuracy": 1.0,
+  "train_loss": 0.15245880158002179,
+  "train_size": 4
+}

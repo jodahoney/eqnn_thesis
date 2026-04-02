@@ -1,0 +1,16 @@
+{
+  "classification_threshold": 0.4357045312295753,
+  "epochs": 50,
+  "experiment_name": "calibration_su2_qcnn_n6_train12_epochs50_seed0",
+  "job_index": 0,
+  "model_family": "su2_qcnn",
+  "num_qubits": 6,
+  "output_dir": "/scratch/users/jdehoney/eqnn_thesis/data/calibration/smoke/su2_qcnn/n6/train_size_12/epochs_50/seed_0",
+  "runtime_seconds": 11.507464196532965,
+  "seed": 0,
+  "test_accuracy": 1.0,
+  "test_loss": 0.1104182275865362,
+  "train_accuracy": 1.0,
+  "train_loss": 0.10769898390211324,
+  "train_size": 12
+}

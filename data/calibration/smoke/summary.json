@@ -1,0 +1,21 @@
+[
+  {
+    "epochs": 50,
+    "mean_classification_threshold": 0.4357045312295753,
+    "mean_runtime_seconds": 11.507464196532965,
+    "mean_test_accuracy": 1.0,
+    "mean_test_loss": 0.1104182275865362,
+    "mean_train_accuracy": 1.0,
+    "mean_train_loss": 0.10769898390211324,
+    "model_family": "su2_qcnn",
+    "num_qubits": 6,
+    "num_runs": 1,
+    "train_size": 12,
+    "variance_classification_threshold": 0.0,
+    "variance_runtime_seconds": 0.0,
+    "variance_test_accuracy": 0.0,
+    "variance_test_loss": 0.0,
+    "variance_train_accuracy": 0.0,
+    "variance_train_loss": 0.0
+  }
+]
