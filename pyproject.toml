@@ -13,6 +13,11 @@ dependencies = [
   "scipy>=1.14,<2",
 ]
 
+[project.optional-dependencies]
+torch = [
+  "torch>=2.2,<3",
+]
+
 [project.scripts]
 eqnn = "eqnn.cli:main"
 

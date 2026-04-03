@@ -10,6 +10,7 @@ from typing import Any
 
 import numpy as np
 
+from eqnn.backends import QCNNBackend
 from eqnn.datasets.heisenberg import DatasetBundle, HeisenbergDatasetConfig, generate_dataset
 from eqnn.datasets.io import load_dataset_bundle, save_dataset_bundle
 from eqnn.models import (
@@ -66,6 +67,8 @@ class BenchmarkSweepConfig:
 def build_model(
     config: ExperimentConfig,
     parameters: np.ndarray | None = None,
+    *,
+    backend: QCNNBackend | None = None,
 ) -> TrainableModel:
     if config.model_family == "su2_qcnn":
         return SU2QCNN(
@@ -80,6 +83,7 @@ def build_model(
                 readout_mode=config.readout_mode,
             ),
             parameters=parameters,
+            backend=backend,
         )
 
     if config.model_family == "baseline_qcnn":
@@ -95,6 +99,7 @@ def build_model(
                 readout_mode=config.readout_mode,
             ),
             parameters=parameters,
+            backend=backend,
         )
 
     return HEAQCNN(
@@ -109,6 +114,7 @@ def build_model(
             readout_mode=config.readout_mode,
         ),
         parameters=parameters,
+        backend=backend,
     )
 
 
@@ -134,10 +140,11 @@ def run_training_experiment(
     *,
     output_dir: str | Path | None = None,
     experiment_name: str | None = None,
+    backend: QCNNBackend | None = None,
     profile: RuntimeProfile | None = None,
 ) -> dict[str, Any]:
     with timed(profile, "experiment.build_model"):
-        model = build_model(experiment_config)
+        model = build_model(experiment_config, backend=backend)
 
     with timed(profile, "experiment.build_trainer"):
         trainer = Trainer(training_config)
