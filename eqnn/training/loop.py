@@ -115,15 +115,31 @@ class Trainer:
         parameters: np.ndarray | None = None,
         profile: RuntimeProfile | None = None,
     ) -> dict[str, float]:
+        threshold = self._current_threshold(model)
+        parameter_array = model.get_parameters() if parameters is None else np.asarray(parameters, dtype=np.float64)
+        backend = getattr(model, "backend", None)
+
+        if backend is not None and hasattr(backend, "evaluate_batch"):
+            with timed(profile, "train.forward_predict"):
+                evaluation = backend.evaluate_batch(
+                    model,
+                    dataset.states,
+                    dataset.labels,
+                    parameter_array,
+                    loss_name=self.config.loss,
+                    threshold=threshold,
+                )
+            with timed(profile, "train.forward_loss"):
+                loss = float(evaluation["loss"])
+            return {"loss": loss, "accuracy": float(evaluation["accuracy"])}
+
         with timed(profile, "train.forward_predict"):
             probabilities = np.asarray(
-                model.predict_batch(dataset.states, parameters=parameters),
+                model.predict_batch(dataset.states, parameters=parameter_array),
                 dtype=np.float64,
             )
 
-        threshold = self._current_threshold(model)
         predictions = (probabilities >= threshold).astype(np.int64)
-
         labels_int = dataset.labels.astype(np.int64)
         accuracy = float(np.mean(predictions == labels_int))
 

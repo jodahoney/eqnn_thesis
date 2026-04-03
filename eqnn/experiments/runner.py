@@ -10,7 +10,7 @@ from typing import Any
 
 import numpy as np
 
-from eqnn.backends import QCNNBackend
+from eqnn.backends import NumpyPureStateBackend, QCNNBackend, TorchPureStateBackend
 from eqnn.datasets.heisenberg import DatasetBundle, HeisenbergDatasetConfig, generate_dataset
 from eqnn.datasets.io import load_dataset_bundle, save_dataset_bundle
 from eqnn.models import (
@@ -29,6 +29,7 @@ from eqnn.utils.timing import RuntimeProfile, timed
 @dataclass(frozen=True)
 class ExperimentConfig:
     model_family: str = "su2_qcnn"
+    backend_name: str = "numpy_pure"
     num_qubits: int = 4
     min_readout_qubits: int | None = None
     boundary: str = "open"
@@ -41,6 +42,8 @@ class ExperimentConfig:
     def __post_init__(self) -> None:
         if self.model_family not in {"su2_qcnn", "baseline_qcnn", "hea_qcnn"}:
             raise ValueError("model_family must be 'su2_qcnn', 'baseline_qcnn', or 'hea_qcnn'")
+        if self.backend_name not in {"numpy_pure", "torch_pure"}:
+            raise ValueError("backend_name must be 'numpy_pure' or 'torch_pure'")
 
 
 @dataclass(frozen=True)
@@ -70,6 +73,7 @@ def build_model(
     *,
     backend: QCNNBackend | None = None,
 ) -> TrainableModel:
+    resolved_backend = build_backend(config.backend_name) if backend is None else backend
     if config.model_family == "su2_qcnn":
         return SU2QCNN(
             QCNNConfig(
@@ -83,7 +87,7 @@ def build_model(
                 readout_mode=config.readout_mode,
             ),
             parameters=parameters,
-            backend=backend,
+            backend=resolved_backend,
         )
 
     if config.model_family == "baseline_qcnn":
@@ -99,7 +103,7 @@ def build_model(
                 readout_mode=config.readout_mode,
             ),
             parameters=parameters,
-            backend=backend,
+            backend=resolved_backend,
         )
 
     return HEAQCNN(
@@ -114,8 +118,16 @@ def build_model(
             readout_mode=config.readout_mode,
         ),
         parameters=parameters,
-        backend=backend,
+        backend=resolved_backend,
     )
+
+
+def build_backend(name: str) -> QCNNBackend:
+    if name == "numpy_pure":
+        return NumpyPureStateBackend()
+    if name == "torch_pure":
+        return TorchPureStateBackend()
+    raise ValueError("backend name must be 'numpy_pure' or 'torch_pure'")
 
 
 def load_or_generate_dataset(

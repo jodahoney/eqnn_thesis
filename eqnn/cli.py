@@ -11,10 +11,12 @@ from eqnn.datasets.cache import load_or_generate_cached_dataset
 from eqnn.datasets.heisenberg import HeisenbergDatasetConfig, generate_dataset
 from eqnn.datasets.io import load_dataset_bundle, save_dataset_bundle
 from eqnn.experiments import (
+    BackendBenchmarkConfig,
     BenchmarkSweepConfig,
     CalibrationSweepConfig,
     ExperimentConfig,
     PaperReproductionConfig,
+    run_backend_benchmark,
     run_benchmark_sweep,
     run_calibration_sweep,
     run_paper_reproduction_suite,
@@ -111,6 +113,48 @@ def build_parser() -> argparse.ArgumentParser:
     _add_training_args(sweep_parser)
     sweep_parser.add_argument("--output-dir", type=Path, required=True)
     sweep_parser.set_defaults(handler=_handle_run_benchmark_sweep)
+
+    backend_benchmark_parser = subparsers.add_parser(
+        "benchmark-backends",
+        help="Run the same experiment with multiple backends for runtime comparison.",
+    )
+    backend_benchmark_parser.add_argument(
+        "--backends",
+        nargs="+",
+        choices=("numpy_pure", "torch_pure"),
+        default=("numpy_pure", "torch_pure"),
+    )
+    backend_benchmark_parser.add_argument("--num-qubits", type=int, required=True)
+    backend_benchmark_parser.add_argument(
+        "--model-family",
+        choices=("su2_qcnn", "baseline_qcnn", "hea_qcnn"),
+        default="su2_qcnn",
+    )
+    backend_benchmark_parser.add_argument("--min-readout-qubits", type=int, default=None)
+    backend_benchmark_parser.add_argument(
+        "--pooling-mode",
+        choices=("partial_trace", "equivariant"),
+        default="partial_trace",
+    )
+    backend_benchmark_parser.add_argument(
+        "--pooling-keep",
+        choices=("left", "right"),
+        default="left",
+    )
+    backend_benchmark_parser.add_argument(
+        "--readout-mode",
+        choices=("swap", "dimerization"),
+        default="swap",
+    )
+    backend_benchmark_parser.add_argument(
+        "--unshared-convolution-parameters",
+        action="store_true",
+        help="Use pair-specific convolution parameters instead of sharing within each parity sublayer.",
+    )
+    _add_dataset_generation_args(backend_benchmark_parser)
+    _add_training_args(backend_benchmark_parser)
+    backend_benchmark_parser.add_argument("--output-dir", type=Path, required=True)
+    backend_benchmark_parser.set_defaults(handler=_handle_benchmark_backends)
 
     calibration_parser = subparsers.add_parser(
         "run-calibration-sweep",
@@ -256,6 +300,7 @@ def _handle_run_experiment(args: argparse.Namespace) -> int:
 
     experiment_config = ExperimentConfig(
         model_family=args.model_family,
+        backend_name=args.backend,
         num_qubits=args.num_qubits,
         min_readout_qubits=args.min_readout_qubits,
         boundary=args.boundary,
@@ -319,6 +364,36 @@ def _handle_run_benchmark_sweep(args: argparse.Namespace) -> int:
         args.profile_json.write_text(json.dumps({"note": "benchmark sweep profiling not yet wired"}, indent=2) + "\n")
 
     print(f"Completed {len(results)} experiments")
+    print(f"Summary written to {(args.output_dir / 'summary.csv').resolve()}")
+    return 0
+
+
+def _handle_benchmark_backends(args: argparse.Namespace) -> int:
+    dataset_config = _dataset_config_from_args(args)
+    training_config = _training_config_from_args(args)
+    benchmark_config = BackendBenchmarkConfig(
+        backend_names=tuple(args.backends),
+        dataset_config=dataset_config,
+        experiment_config=ExperimentConfig(
+            model_family=args.model_family,
+            backend_name=args.backends[0],
+            num_qubits=args.num_qubits,
+            min_readout_qubits=args.min_readout_qubits,
+            boundary=args.boundary,
+            shared_convolution_parameter=not args.unshared_convolution_parameters,
+            pooling_mode=args.pooling_mode,
+            pooling_keep=args.pooling_keep,
+            readout_mode=args.readout_mode,
+        ),
+        training_config=training_config,
+    )
+    rows = run_backend_benchmark(benchmark_config, args.output_dir)
+
+    if args.profile_json is not None:
+        args.profile_json.parent.mkdir(parents=True, exist_ok=True)
+        args.profile_json.write_text(json.dumps({"note": "backend benchmark profiling is stored per run"}, indent=2) + "\n")
+
+    print(f"Completed {len(rows)} backend comparison runs")
     print(f"Summary written to {(args.output_dir / 'summary.csv').resolve()}")
     return 0
 
@@ -482,6 +557,11 @@ def _add_model_args(parser: argparse.ArgumentParser) -> None:
         "--model-family",
         choices=("su2_qcnn", "baseline_qcnn", "hea_qcnn"),
         default="su2_qcnn",
+    )
+    parser.add_argument(
+        "--backend",
+        choices=("numpy_pure", "torch_pure"),
+        default="numpy_pure",
     )
     parser.add_argument("--min-readout-qubits", type=int, default=None)
     parser.add_argument(

@@ -18,7 +18,7 @@ from eqnn.models import (
     SU2QCNN,
 )
 from eqnn.physics.heisenberg import BondAlternatingHeisenbergHamiltonian
-from eqnn.training import TrainingConfig
+from eqnn.training import Trainer, TrainingConfig
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch is not installed")
@@ -109,6 +109,58 @@ class TorchPureStateBackendParityTests(unittest.TestCase):
             numpy_model.loss(dataset.states, dataset.labels, loss_name="mse"),
             places=10,
         )
+
+    def test_predict_batch_matches_numpy_backend(self) -> None:
+        dataset = self._combined_dataset(num_qubits=4, num_points=5, split_seed=10)
+
+        su2_parameters = np.asarray((0.18, -0.06, 0.12), dtype=np.float64)
+        numpy_su2 = SU2QCNN(QCNNConfig(num_qubits=4), parameters=su2_parameters, backend=NumpyPureStateBackend())
+        torch_su2 = SU2QCNN(QCNNConfig(num_qubits=4), parameters=su2_parameters, backend=TorchPureStateBackend())
+        np.testing.assert_allclose(
+            torch_su2.predict_batch(dataset.states),
+            numpy_su2.predict_batch(dataset.states),
+            atol=1e-10,
+        )
+
+        hea_parameters = np.linspace(-0.2, 0.2, 24)
+        numpy_hea = HEAQCNN(HEAQCNNConfig(num_qubits=4), parameters=hea_parameters, backend=NumpyPureStateBackend())
+        torch_hea = HEAQCNN(HEAQCNNConfig(num_qubits=4), parameters=hea_parameters, backend=TorchPureStateBackend())
+        np.testing.assert_allclose(
+            torch_hea.predict_batch(dataset.states),
+            numpy_hea.predict_batch(dataset.states),
+            atol=1e-10,
+        )
+
+        baseline_parameters = np.asarray((0.2, -0.4, 0.1, 0.3, 0.05, -0.2, -0.1, 0.25, 0.15), dtype=np.float64)
+        numpy_baseline = BaselineQCNN(
+            BaselineQCNNConfig(num_qubits=4),
+            parameters=baseline_parameters,
+            backend=NumpyPureStateBackend(),
+        )
+        torch_baseline = BaselineQCNN(
+            BaselineQCNNConfig(num_qubits=4),
+            parameters=baseline_parameters,
+            backend=TorchPureStateBackend(),
+        )
+        np.testing.assert_allclose(
+            torch_baseline.predict_batch(dataset.states),
+            numpy_baseline.predict_batch(dataset.states),
+            atol=1e-10,
+        )
+
+    def test_trainer_evaluate_matches_numpy_backend(self) -> None:
+        dataset_bundle = generate_dataset(HeisenbergDatasetConfig(num_qubits=4, num_points=5, split_seed=11))
+        trainer = Trainer(TrainingConfig(loss="mse", gradient_backend="exact"))
+        parameters = np.linspace(-0.15, 0.25, 24)
+
+        numpy_model = HEAQCNN(HEAQCNNConfig(num_qubits=4), parameters=parameters, backend=NumpyPureStateBackend())
+        torch_model = HEAQCNN(HEAQCNNConfig(num_qubits=4), parameters=parameters, backend=TorchPureStateBackend())
+
+        numpy_metrics = trainer.evaluate(numpy_model, dataset_bundle.test)
+        torch_metrics = trainer.evaluate(torch_model, dataset_bundle.test)
+
+        self.assertAlmostEqual(torch_metrics["loss"], numpy_metrics["loss"], places=10)
+        self.assertAlmostEqual(torch_metrics["accuracy"], numpy_metrics["accuracy"], places=10)
 
     def test_gradients_match_numpy_backend(self) -> None:
         dataset = self._combined_dataset(num_qubits=4, num_points=5, split_seed=8)

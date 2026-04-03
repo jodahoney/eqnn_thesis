@@ -13,6 +13,7 @@ from eqnn.backends.torch_ops import (
     expectation_value as torch_expectation_value,
     kron_all as torch_kron_all,
     partial_trace_density_matrix as torch_partial_trace_density_matrix,
+    statevectors_to_density_matrices,
 )
 from eqnn.layers import (
     AnisotropicConvolution,
@@ -45,6 +46,7 @@ class TorchPureStateBackend:
         self.device = torch.device(device)
         self.complex_dtype = torch.complex128 if complex_dtype is None else complex_dtype
         self.real_dtype = torch.float64 if self.complex_dtype == torch.complex128 else torch.float32
+        self._operator_cache: dict[tuple[str, int], torch.Tensor] = {}
 
     @property
     def supports_exact_gradients(self) -> bool:
@@ -64,12 +66,87 @@ class TorchPureStateBackend:
             state_tensor,
             parameter_tensor,
             exact_gradients_required=False,
+            batched_statevectors=False,
         )
         return model.finalize_forward_pass(
             self._to_numpy(final_density),
             final_num_qubits,
             parameter_array[model.readout_slice],
         )
+
+    def predict_batch(
+        self,
+        model: BackendCompatibleQCNN,
+        states: ComplexArray,
+        parameters: np.ndarray,
+    ) -> np.ndarray:
+        states_array = np.asarray(states, dtype=np.complex128)
+        if states_array.ndim != 2:
+            raise ValueError("states must have shape (num_examples, hilbert_dimension)")
+
+        with torch.no_grad():
+            parameter_tensor = self._parameter_tensor(parameters, requires_grad=False)
+            state_tensor = self._complex_tensor(states_array)
+            probabilities = self.predict_batch_tensor(model, state_tensor, parameter_tensor)
+        return np.asarray(probabilities.detach().cpu().numpy(), dtype=np.float64)
+
+    def predict_batch_tensor(
+        self,
+        model: BackendCompatibleQCNN,
+        state_tensor: "torch.Tensor",
+        parameter_tensor: "torch.Tensor",
+    ) -> "torch.Tensor":
+        return self._probabilities_from_states(
+            model,
+            state_tensor,
+            parameter_tensor,
+            exact_gradients_required=False,
+            batched_statevectors=True,
+        )
+
+    def evaluate_batch(
+        self,
+        model: BackendCompatibleQCNN,
+        states: ComplexArray,
+        labels: np.ndarray,
+        parameters: np.ndarray,
+        *,
+        loss_name: str,
+        threshold: float,
+    ) -> dict[str, np.ndarray | float]:
+        states_array = np.asarray(states, dtype=np.complex128)
+        labels_array = np.asarray(labels, dtype=np.float64)
+        if states_array.ndim != 2:
+            raise ValueError("states must have shape (num_examples, hilbert_dimension)")
+        if labels_array.shape != (states_array.shape[0],):
+            raise ValueError("labels must align with states")
+
+        with torch.no_grad():
+            parameter_tensor = self._parameter_tensor(parameters, requires_grad=False)
+            state_tensor = self._complex_tensor(states_array)
+            label_tensor = torch.as_tensor(labels_array, dtype=self.real_dtype, device=self.device)
+            probabilities = self.predict_batch_tensor(model, state_tensor, parameter_tensor)
+            if loss_name == "mse":
+                loss_tensor = torch.mean((probabilities - label_tensor) ** 2)
+            elif loss_name == "bce":
+                clipped = torch.clamp(probabilities, 1e-12, 1.0 - 1e-12)
+                loss_tensor = -torch.mean(
+                    label_tensor * torch.log(clipped) + (1.0 - label_tensor) * torch.log(1.0 - clipped)
+                )
+            else:
+                raise ValueError("loss_name must be 'bce' or 'mse'")
+
+            prediction_tensor = (probabilities >= float(threshold)).to(dtype=torch.int64)
+            accuracy_tensor = torch.mean(
+                (prediction_tensor == label_tensor.to(dtype=torch.int64)).to(dtype=self.real_dtype)
+            )
+
+        return {
+            "probabilities": np.asarray(probabilities.detach().cpu().numpy(), dtype=np.float64),
+            "predictions": np.asarray(prediction_tensor.detach().cpu().numpy(), dtype=np.int64),
+            "loss": float(loss_tensor.detach().cpu().item()),
+            "accuracy": float(accuracy_tensor.detach().cpu().item()),
+        }
 
     def loss_gradient(
         self,
@@ -98,18 +175,14 @@ class TorchPureStateBackend:
         if labels_array.shape != (states_array.shape[0],):
             raise ValueError("labels must align with states")
 
-        probabilities = []
-        for state in states_array:
-            state_tensor = self._complex_tensor(state)
-            probability = self._probability_from_state(
-                model,
-                state_tensor,
-                parameter_tensor,
-                exact_gradients_required=True,
-            )
-            probabilities.append(probability)
-
-        probability_tensor = torch.stack(probabilities)
+        state_tensor = self._complex_tensor(states_array)
+        probability_tensor = self._probabilities_from_states(
+            model,
+            state_tensor,
+            parameter_tensor,
+            exact_gradients_required=True,
+            batched_statevectors=True,
+        )
         label_tensor = torch.as_tensor(labels_array, dtype=self.real_dtype, device=self.device)
 
         if loss_name == "mse":
@@ -124,19 +197,21 @@ class TorchPureStateBackend:
         assert parameter_tensor.grad is not None
         return np.asarray(parameter_tensor.grad.detach().cpu().numpy(), dtype=np.float64)
 
-    def _probability_from_state(
+    def _probabilities_from_states(
         self,
         model: BackendCompatibleQCNN,
-        state: "torch.Tensor",
+        states: "torch.Tensor",
         parameters: "torch.Tensor",
         *,
         exact_gradients_required: bool,
+        batched_statevectors: bool,
     ) -> "torch.Tensor":
         final_density, final_num_qubits = self._forward_density(
             model,
-            state,
+            states,
             parameters,
             exact_gradients_required=exact_gradients_required,
+            batched_statevectors=batched_statevectors,
         )
         return self._readout_probability(
             model,
@@ -152,14 +227,15 @@ class TorchPureStateBackend:
         parameters: "torch.Tensor",
         *,
         exact_gradients_required: bool,
+        batched_statevectors: bool,
     ) -> tuple["torch.Tensor", int]:
-        current_density = as_torch_density_matrix(state)
+        current_density = self._states_to_density_matrices(state, batched_statevectors=batched_statevectors)
         current_num_qubits = int(model.block_num_qubits[0])
 
         for block_index, convolution in enumerate(model.convolutions):
             convolution_parameters = parameters[model.convolution_slices[block_index]]
             unitary = self._convolution_unitary(convolution, convolution_parameters)
-            current_density = unitary @ current_density @ torch.conj(unitary).transpose(-2, -1)
+            current_density = self._apply_unitary(unitary, current_density)
 
             if block_index < len(model.poolings):
                 pooling = model.poolings[block_index]
@@ -196,7 +272,13 @@ class TorchPureStateBackend:
 
         density_numpy = self._to_numpy(density_matrix)
         parameter_numpy = np.asarray(parameters.detach().cpu().numpy(), dtype=np.float64)
-        reduced_numpy = pooling.apply(density_numpy, parameters=parameter_numpy)
+        if density_numpy.ndim == 3:
+            reduced_numpy = np.asarray(
+                [pooling.apply(sample, parameters=parameter_numpy) for sample in density_numpy],
+                dtype=np.complex128,
+            )
+        else:
+            reduced_numpy = pooling.apply(density_numpy, parameters=parameter_numpy)
         return self._complex_tensor(reduced_numpy), int(pooling.output_num_qubits)
 
     def _readout_probability(
@@ -212,7 +294,7 @@ class TorchPureStateBackend:
             swap_value = torch_expectation_value(density_matrix, self._swap_operator())
             return torch.clamp(0.5 * (swap_value + 1.0), 0.0, 1.0)
 
-        feature_operator = self._complex_tensor(model.dimerization_operator(num_qubits))
+        feature_operator = self._dimerization_operator(model, num_qubits)
         feature_value = torch_expectation_value(density_matrix, feature_operator)
         readout_weight = readout_parameters[0]
         readout_bias = readout_parameters[1]
@@ -380,53 +462,114 @@ class TorchPureStateBackend:
             )
         )
 
+    def _states_to_density_matrices(
+        self,
+        state: "torch.Tensor",
+        *,
+        batched_statevectors: bool,
+    ) -> "torch.Tensor":
+        if batched_statevectors:
+            if state.ndim == 2:
+                return statevectors_to_density_matrices(state)
+            if state.ndim == 3 and state.shape[-2] == state.shape[-1]:
+                return state
+            raise ValueError("Batched inputs must be statevectors with shape (batch, dim) or density matrices")
+
+        if state.ndim == 1:
+            return as_torch_density_matrix(state)
+        if state.ndim == 2 and state.shape[-2] == state.shape[-1]:
+            return state
+        raise ValueError("Single-state inputs must be a statevector or a square density matrix")
+
+    def _apply_unitary(
+        self,
+        unitary: "torch.Tensor",
+        density_matrix: "torch.Tensor",
+    ) -> "torch.Tensor":
+        unitary_dagger = torch.conj(unitary).transpose(-2, -1)
+        if density_matrix.ndim == 2:
+            return unitary @ density_matrix @ unitary_dagger
+        return torch.matmul(torch.matmul(unitary.unsqueeze(0), density_matrix), unitary_dagger.unsqueeze(0))
+
     def _identity(self, dimension: int) -> "torch.Tensor":
-        return torch.eye(dimension, dtype=self.complex_dtype, device=self.device)
+        cache_key = ("identity", int(dimension))
+        if cache_key not in self._operator_cache:
+            self._operator_cache[cache_key] = torch.eye(dimension, dtype=self.complex_dtype, device=self.device)
+        return self._operator_cache[cache_key]
 
     def _swap_operator(self) -> "torch.Tensor":
-        return self._complex_tensor(
-            np.asarray(
-                [
-                    [1.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 1.0, 0.0],
-                    [0.0, 1.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0],
-                ],
-                dtype=np.complex128,
+        cache_key = ("swap", 4)
+        if cache_key not in self._operator_cache:
+            self._operator_cache[cache_key] = self._complex_tensor(
+                np.asarray(
+                    [
+                        [1.0, 0.0, 0.0, 0.0],
+                        [0.0, 0.0, 1.0, 0.0],
+                        [0.0, 1.0, 0.0, 0.0],
+                        [0.0, 0.0, 0.0, 1.0],
+                    ],
+                    dtype=np.complex128,
+                )
             )
-        )
+        return self._operator_cache[cache_key]
 
     def _cz_operator(self) -> "torch.Tensor":
-        return self._complex_tensor(np.diag((1.0, 1.0, 1.0, -1.0)).astype(np.complex128))
+        cache_key = ("cz", 4)
+        if cache_key not in self._operator_cache:
+            self._operator_cache[cache_key] = self._complex_tensor(
+                np.diag((1.0, 1.0, 1.0, -1.0)).astype(np.complex128)
+            )
+        return self._operator_cache[cache_key]
 
     def _xx_operator(self) -> "torch.Tensor":
-        return self._complex_tensor(
-            np.asarray(
-                (
-                    (0.0, 0.0, 0.0, 1.0),
-                    (0.0, 0.0, 1.0, 0.0),
-                    (0.0, 1.0, 0.0, 0.0),
-                    (1.0, 0.0, 0.0, 0.0),
-                ),
-                dtype=np.complex128,
+        cache_key = ("xx", 4)
+        if cache_key not in self._operator_cache:
+            self._operator_cache[cache_key] = self._complex_tensor(
+                np.asarray(
+                    (
+                        (0.0, 0.0, 0.0, 1.0),
+                        (0.0, 0.0, 1.0, 0.0),
+                        (0.0, 1.0, 0.0, 0.0),
+                        (1.0, 0.0, 0.0, 0.0),
+                    ),
+                    dtype=np.complex128,
+                )
             )
-        )
+        return self._operator_cache[cache_key]
 
     def _yy_operator(self) -> "torch.Tensor":
-        return self._complex_tensor(
-            np.asarray(
-                (
-                    (0.0, 0.0, 0.0, -1.0),
-                    (0.0, 0.0, 1.0, 0.0),
-                    (0.0, 1.0, 0.0, 0.0),
-                    (-1.0, 0.0, 0.0, 0.0),
-                ),
-                dtype=np.complex128,
+        cache_key = ("yy", 4)
+        if cache_key not in self._operator_cache:
+            self._operator_cache[cache_key] = self._complex_tensor(
+                np.asarray(
+                    (
+                        (0.0, 0.0, 0.0, -1.0),
+                        (0.0, 0.0, 1.0, 0.0),
+                        (0.0, 1.0, 0.0, 0.0),
+                        (-1.0, 0.0, 0.0, 0.0),
+                    ),
+                    dtype=np.complex128,
+                )
             )
-        )
+        return self._operator_cache[cache_key]
 
     def _zz_operator(self) -> "torch.Tensor":
-        return self._complex_tensor(np.diag((1.0, -1.0, -1.0, 1.0)).astype(np.complex128))
+        cache_key = ("zz", 4)
+        if cache_key not in self._operator_cache:
+            self._operator_cache[cache_key] = self._complex_tensor(
+                np.diag((1.0, -1.0, -1.0, 1.0)).astype(np.complex128)
+            )
+        return self._operator_cache[cache_key]
+
+    def _dimerization_operator(
+        self,
+        model: BackendCompatibleQCNN,
+        num_qubits: int,
+    ) -> "torch.Tensor":
+        cache_key = (f"dimerization_{model.config.boundary}", int(num_qubits))
+        if cache_key not in self._operator_cache:
+            self._operator_cache[cache_key] = self._complex_tensor(model.dimerization_operator(num_qubits))
+        return self._operator_cache[cache_key]
 
     def _complex_tensor(self, array: ComplexArray | np.ndarray | "torch.Tensor") -> "torch.Tensor":
         return torch.as_tensor(array, dtype=self.complex_dtype, device=self.device)

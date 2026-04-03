@@ -138,8 +138,13 @@ class BaseQCNNModel(TrainableModel):
         states: ComplexArray,
         parameters: Iterable[float] | None = None,
     ) -> np.ndarray:
+        parameter_array = self.parameters if parameters is None else self._validate_parameters(parameters)
         return np.asarray(
-            [self.predict(state, parameters=parameters) for state in states],
+            self.backend.predict_batch(
+                self,
+                states,
+                parameter_array,
+            ),
             dtype=np.float64,
         )
 

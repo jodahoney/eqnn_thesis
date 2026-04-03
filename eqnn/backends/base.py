@@ -83,6 +83,26 @@ class QCNNBackend(Protocol):
     ) -> QCNNForwardPass:
         ...
 
+    def predict_batch(
+        self,
+        model: BackendCompatibleQCNN,
+        states: ComplexArray,
+        parameters: np.ndarray,
+    ) -> np.ndarray:
+        ...
+
+    def evaluate_batch(
+        self,
+        model: BackendCompatibleQCNN,
+        states: ComplexArray,
+        labels: np.ndarray,
+        parameters: np.ndarray,
+        *,
+        loss_name: str,
+        threshold: float,
+    ) -> dict[str, np.ndarray | float]:
+        ...
+
     def loss_gradient(
         self,
         model: BackendCompatibleQCNN,

@@ -37,6 +37,13 @@ def statevector_to_density_matrix(state: "torch.Tensor") -> "torch.Tensor":
     return torch.outer(state, torch.conj(state))
 
 
+def statevectors_to_density_matrices(states: "torch.Tensor") -> "torch.Tensor":
+    _require_torch()
+    if states.ndim != 2:
+        raise ValueError("statevectors_to_density_matrices expects shape (batch, hilbert_dimension)")
+    return states.unsqueeze(-1) * torch.conj(states).unsqueeze(-2)
+
+
 def as_density_matrix(state: "torch.Tensor") -> "torch.Tensor":
     _require_torch()
     if state.ndim == 1:
@@ -60,19 +67,21 @@ def partial_trace_density_matrix(
             f"expected {(expected_dimension, expected_dimension)}, got {tuple(density_matrix.shape)}"
         )
 
-    tensor = density_matrix.reshape((2,) * num_qubits * 2)
+    batch_shape = tuple(density_matrix.shape[:-2])
+    batch_ndim = len(batch_shape)
+    tensor = density_matrix.reshape(batch_shape + (2,) * num_qubits * 2)
     current_num_qubits = num_qubits
     for site in reversed(traced_out):
         tensor = torch.diagonal(
             tensor,
             offset=0,
-            dim1=site,
-            dim2=site + current_num_qubits,
+            dim1=batch_ndim + site,
+            dim2=batch_ndim + site + current_num_qubits,
         ).sum(dim=-1)
         current_num_qubits -= 1
 
     reduced_dimension = 1 << current_num_qubits
-    return tensor.reshape(reduced_dimension, reduced_dimension)
+    return tensor.reshape(batch_shape + (reduced_dimension, reduced_dimension))
 
 
 def expectation_value(
@@ -80,4 +89,4 @@ def expectation_value(
     operator: "torch.Tensor",
 ) -> "torch.Tensor":
     _require_torch()
-    return torch.real(torch.trace(density_matrix @ operator))
+    return torch.real(torch.einsum("...ij,ji->...", density_matrix, operator))

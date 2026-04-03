@@ -1,6 +1,7 @@
 """Experiment orchestration utilities."""
 
 from eqnn.experiments.analysis import summarize_experiment_directory
+from eqnn.experiments.backend_benchmark import BackendBenchmarkConfig, run_backend_benchmark
 from eqnn.experiments.calibration import (
     CalibrationJob,
     CalibrationSweepConfig,
@@ -21,12 +22,14 @@ from eqnn.experiments.reproduction import (
 from eqnn.experiments.runner import (
     BenchmarkSweepConfig,
     ExperimentConfig,
+    build_backend,
     build_model,
     run_benchmark_sweep,
     run_training_experiment,
 )
 
 __all__ = [
+    "BackendBenchmarkConfig",
     "BenchmarkSweepConfig",
     "CalibrationJob",
     "CalibrationSweepConfig",
@@ -34,6 +37,7 @@ __all__ = [
     "PaperDatasetConfig",
     "PaperReproductionConfig",
     "aggregate_calibration_runs",
+    "build_backend",
     "build_model",
     "calibration_job_from_index",
     "enumerate_calibration_jobs",
@@ -41,6 +45,7 @@ __all__ = [
     "load_completed_calibration_runs",
     "paper_test_ratios",
     "paper_training_ratios",
+    "run_backend_benchmark",
     "run_benchmark_sweep",
     "run_calibration_sweep",
     "run_paper_reproduction_suite",

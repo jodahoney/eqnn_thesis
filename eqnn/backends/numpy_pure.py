@@ -41,6 +41,53 @@ class NumpyPureStateBackend:
             parameter_array[model.readout_slice],
         )
 
+    def predict_batch(
+        self,
+        model: BackendCompatibleQCNN,
+        states: ComplexArray,
+        parameters: np.ndarray,
+    ) -> np.ndarray:
+        states_array = np.asarray(states, dtype=np.complex128)
+        if states_array.ndim != 2:
+            raise ValueError("states must have shape (num_examples, hilbert_dimension)")
+        parameter_array = np.asarray(parameters, dtype=np.float64)
+        return np.asarray(
+            [self.forward(model, state, parameter_array).probability for state in states_array],
+            dtype=np.float64,
+        )
+
+    def evaluate_batch(
+        self,
+        model: BackendCompatibleQCNN,
+        states: ComplexArray,
+        labels: np.ndarray,
+        parameters: np.ndarray,
+        *,
+        loss_name: str,
+        threshold: float,
+    ) -> dict[str, np.ndarray | float]:
+        probabilities = self.predict_batch(model, states, parameters)
+        labels_array = np.asarray(labels, dtype=np.float64)
+        predictions = (probabilities >= float(threshold)).astype(np.int64)
+        accuracy = float(np.mean(predictions == labels_array.astype(np.int64)))
+
+        if loss_name == "mse":
+            loss = float(np.mean((probabilities - labels_array) ** 2))
+        elif loss_name == "bce":
+            clipped = np.clip(probabilities, 1e-12, 1.0 - 1e-12)
+            loss = float(
+                -np.mean(labels_array * np.log(clipped) + (1.0 - labels_array) * np.log(1.0 - clipped))
+            )
+        else:
+            raise ValueError("loss_name must be 'bce' or 'mse'")
+
+        return {
+            "probabilities": probabilities,
+            "predictions": predictions,
+            "loss": loss,
+            "accuracy": accuracy,
+        }
+
     def loss_gradient(
         self,
         model: BackendCompatibleQCNN,

@@ -6,14 +6,18 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from eqnn.cli import main as cli_main
 from eqnn.datasets.heisenberg import HeisenbergDatasetConfig, generate_dataset
 from eqnn.experiments import (
+    BackendBenchmarkConfig,
     BenchmarkSweepConfig,
     ExperimentConfig,
+    run_backend_benchmark,
     run_benchmark_sweep,
     run_training_experiment,
     summarize_experiment_directory,
 )
+from eqnn.backends import TORCH_AVAILABLE
 from eqnn.training import TrainingConfig
 
 
@@ -101,3 +105,68 @@ class ExperimentRunnerTests(unittest.TestCase):
             self.assertTrue(summary_csv.exists())
             self.assertEqual({row["model_family"] for row in rows}, {"su2_qcnn", "baseline_qcnn"})
             self.assertEqual({row["num_runs"] for row in rows}, {2})
+
+    def test_run_backend_benchmark_writes_summary_files(self) -> None:
+        benchmark_config = BackendBenchmarkConfig(
+            backend_names=("numpy_pure",),
+            dataset_config=HeisenbergDatasetConfig(num_qubits=4, num_points=5, split_seed=2),
+            experiment_config=ExperimentConfig(
+                model_family="su2_qcnn",
+                num_qubits=4,
+                backend_name="numpy_pure",
+            ),
+            training_config=TrainingConfig(epochs=1, learning_rate=0.05),
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "backend_benchmark"
+            rows = run_backend_benchmark(benchmark_config, output_dir)
+
+            self.assertEqual(len(rows), 1)
+            self.assertTrue((output_dir / "summary.json").exists())
+            self.assertTrue((output_dir / "summary.csv").exists())
+            self.assertEqual(rows[0]["backend_name"], "numpy_pure")
+
+    def test_cli_benchmark_backends_smoke_with_numpy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "cli_backend_benchmark"
+            exit_code = cli_main(
+                [
+                    "benchmark-backends",
+                    "--backends",
+                    "numpy_pure",
+                    "--num-qubits",
+                    "4",
+                    "--model-family",
+                    "su2_qcnn",
+                    "--num-points",
+                    "5",
+                    "--epochs",
+                    "1",
+                    "--output-dir",
+                    str(output_dir),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            self.assertTrue((output_dir / "summary.csv").exists())
+
+    @unittest.skipUnless(TORCH_AVAILABLE, "torch is not installed")
+    def test_run_backend_benchmark_supports_numpy_and_torch(self) -> None:
+        benchmark_config = BackendBenchmarkConfig(
+            backend_names=("numpy_pure", "torch_pure"),
+            dataset_config=HeisenbergDatasetConfig(num_qubits=4, num_points=5, split_seed=3),
+            experiment_config=ExperimentConfig(
+                model_family="hea_qcnn",
+                num_qubits=4,
+                backend_name="numpy_pure",
+            ),
+            training_config=TrainingConfig(epochs=1, learning_rate=0.05, gradient_backend="exact"),
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "backend_benchmark_torch"
+            rows = run_backend_benchmark(benchmark_config, output_dir)
+
+            self.assertEqual(len(rows), 2)
+            self.assertEqual({row["backend_name"] for row in rows}, {"numpy_pure", "torch_pure"})
