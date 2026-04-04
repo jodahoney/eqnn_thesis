@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from eqnn.backends import TORCH_AVAILABLE
 from eqnn.cli import main as cli_main
 from eqnn.experiments import (
     CalibrationSweepConfig,
@@ -60,6 +61,7 @@ class CalibrationSweepTests(unittest.TestCase):
             self.assertEqual(len(rows), 2)
             self.assertEqual({row["model_family"] for row in rows}, {"su2_qcnn", "hea_qcnn"})
             for row in rows:
+                self.assertEqual(row["backend_name"], "numpy_pure")
                 self.assertIn("mean_test_accuracy", row)
                 self.assertIn("variance_test_loss", row)
                 self.assertEqual(row["num_runs"], "1")
@@ -102,3 +104,27 @@ class CalibrationSweepTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             self.assertTrue((output_dir / "summary.csv").exists())
+
+    @unittest.skipUnless(TORCH_AVAILABLE, "torch is not installed")
+    def test_torch_backend_calibration_job_writes_artifacts(self) -> None:
+        config = CalibrationSweepConfig(
+            model_families=("su2_qcnn",),
+            backend_name="torch_pure",
+            num_qubits_values=(4,),
+            train_sizes=(2,),
+            epochs_values=(1,),
+            random_seeds=(0,),
+            dense_test_points=11,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "torch_calibration"
+            result = run_calibration_sweep(config, output_dir, job_index=0)
+
+            run = result["run"]
+            run_output_dir = Path(run["output_dir"])
+
+            self.assertEqual(run["backend_name"], "torch_pure")
+            self.assertTrue(run_output_dir.exists())
+            self.assertTrue((run_output_dir / "metrics.json").exists())
+            self.assertTrue((run_output_dir / "best_parameters.npy").exists())

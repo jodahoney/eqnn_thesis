@@ -21,6 +21,7 @@ from eqnn.utils.timing import RuntimeProfile, timed
 @dataclass(frozen=True)
 class CalibrationSweepConfig:
     model_families: tuple[str, ...] = ("su2_qcnn", "hea_qcnn")
+    backend_name: str = "numpy_pure"
     num_qubits_values: tuple[int, ...] = (6, 10)
     train_sizes: tuple[int, ...] = (12,)
     epochs_values: tuple[int, ...] = (50, 150, 300, 500, 750)
@@ -60,6 +61,8 @@ class CalibrationSweepConfig:
         invalid = tuple(family for family in self.model_families if family not in allowed_families)
         if invalid:
             raise ValueError(f"Unsupported model_families: {invalid}")
+        if self.backend_name not in {"numpy_pure", "torch_pure"}:
+            raise ValueError("backend_name must be 'numpy_pure' or 'torch_pure'")
         if self.loss != "mse":
             raise ValueError("Calibration sweeps are locked to loss='mse'")
         if self.batch_size != 2:
@@ -148,7 +151,7 @@ def run_calibration_sweep(
                 profile=profile,
             )
         if job_index is not None:
-            run_row = _load_run_row(_job_output_dir(output_path, jobs[0]) / "calibration_run.json")
+            run_row = _load_run_row(_job_output_dir(output_path, config, jobs[0]) / "calibration_run.json")
             return {"job": asdict(jobs[0]), "run": run_row}
 
     run_rows = load_completed_calibration_runs(output_path)
@@ -175,6 +178,7 @@ def load_completed_calibration_runs(output_dir: str | Path) -> list[dict[str, An
     rows.sort(
         key=lambda row: (
             int(row["job_index"]),
+            str(row["backend_name"]),
             str(row["model_family"]),
             int(row["num_qubits"]),
             int(row["train_size"]),
@@ -189,6 +193,7 @@ def aggregate_calibration_runs(run_rows: list[dict[str, Any]]) -> list[dict[str,
     grouped: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
     for row in run_rows:
         key = (
+            row["backend_name"],
             row["model_family"],
             int(row["num_qubits"]),
             int(row["train_size"]),
@@ -199,10 +204,11 @@ def aggregate_calibration_runs(run_rows: list[dict[str, Any]]) -> list[dict[str,
     summary_rows: list[dict[str, Any]] = []
     for key, rows in grouped.items():
         summary_row = {
-            "model_family": key[0],
-            "num_qubits": key[1],
-            "train_size": key[2],
-            "epochs": key[3],
+            "backend_name": key[0],
+            "model_family": key[1],
+            "num_qubits": key[2],
+            "train_size": key[3],
+            "epochs": key[4],
             "num_runs": len(rows),
         }
         for metric_name in (
@@ -232,6 +238,7 @@ def aggregate_calibration_runs(run_rows: list[dict[str, Any]]) -> list[dict[str,
 
     summary_rows.sort(
         key=lambda row: (
+            str(row["backend_name"]),
             str(row["model_family"]),
             int(row["num_qubits"]),
             int(row["train_size"]),
@@ -250,7 +257,7 @@ def _run_calibration_job(
     force_rerun: bool,
     profile: RuntimeProfile | None = None,
 ) -> dict[str, Any]:
-    run_output_dir = _job_output_dir(output_path, job)
+    run_output_dir = _job_output_dir(output_path, config, job)
     run_output_dir.mkdir(parents=True, exist_ok=True)
     run_row_path = run_output_dir / "calibration_run.json"
 
@@ -280,6 +287,7 @@ def _run_calibration_job(
             dataset,
             ExperimentConfig(
                 model_family=job.model_family,
+                backend_name=config.backend_name,
                 num_qubits=job.num_qubits,
                 boundary=config.boundary,
                 shared_convolution_parameter=config.shared_convolution_parameter,
@@ -303,7 +311,7 @@ def _run_calibration_job(
                 threshold_critical_ratio=config.threshold_critical_ratio,
             ),
             output_dir=run_output_dir,
-            experiment_name=_job_experiment_name(job),
+            experiment_name=_job_experiment_name(config, job),
             profile=run_profile,
         )
 
@@ -312,6 +320,7 @@ def _run_calibration_job(
     run_row = {
         "job_index": int(job.index),
         "experiment_name": str(result["experiment_name"]),
+        "backend_name": str(config.backend_name),
         "model_family": str(job.model_family),
         "num_qubits": int(job.num_qubits),
         "train_size": int(job.train_size),
@@ -329,9 +338,10 @@ def _run_calibration_job(
     return run_row
 
 
-def _job_output_dir(output_path: Path, job: CalibrationJob) -> Path:
+def _job_output_dir(output_path: Path, config: CalibrationSweepConfig, job: CalibrationJob) -> Path:
     return (
         output_path
+        / config.backend_name
         / job.model_family
         / f"n{job.num_qubits}"
         / f"train_size_{job.train_size}"
@@ -340,9 +350,9 @@ def _job_output_dir(output_path: Path, job: CalibrationJob) -> Path:
     )
 
 
-def _job_experiment_name(job: CalibrationJob) -> str:
+def _job_experiment_name(config: CalibrationSweepConfig, job: CalibrationJob) -> str:
     return (
-        f"calibration_{job.model_family}_n{job.num_qubits}_"
+        f"calibration_{job.model_family}_{config.backend_name}_n{job.num_qubits}_"
         f"train{job.train_size}_epochs{job.epochs}_seed{job.seed}"
     )
 
@@ -365,6 +375,7 @@ def _serialize_for_json(value: Any) -> Any:
 
 def _write_summary_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     fieldnames = [
+        "backend_name",
         "model_family",
         "num_qubits",
         "train_size",

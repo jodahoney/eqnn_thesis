@@ -191,6 +191,11 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("auto", "dense", "sparse"),
         default="auto",
     )
+    calibration_parser.add_argument(
+        "--backend-name",
+        choices=("numpy_pure", "torch_pure"),
+        default="numpy_pure",
+    )
     calibration_parser.add_argument("--job-index", type=int, default=None)
     calibration_parser.add_argument("--aggregate-only", action="store_true")
     calibration_parser.add_argument("--force-rerun", action="store_true")
@@ -415,6 +420,7 @@ def _handle_run_calibration_sweep(args: argparse.Namespace) -> int:
         right_ratio_max=args.right_ratio_max,
         dense_test_points=args.dense_test_points,
         eigensolver=args.eigensolver,
+        backend_name=args.backend_name,
     )
     results = run_calibration_sweep(
         config,
