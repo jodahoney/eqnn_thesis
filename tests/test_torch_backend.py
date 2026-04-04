@@ -7,6 +7,11 @@ from pathlib import Path
 import numpy as np
 
 from eqnn.backends import NumpyPureStateBackend, TORCH_AVAILABLE, TorchPureStateBackend
+from eqnn.backends.torch_ops import (
+    partial_trace_density_matrix,
+    statevector_to_density_matrix,
+    statevectors_to_density_matrices,
+)
 from eqnn.datasets.heisenberg import DatasetSplit, HeisenbergDatasetConfig, generate_dataset
 from eqnn.experiments.runner import ExperimentConfig, run_training_experiment
 from eqnn.models import (
@@ -147,6 +152,37 @@ class TorchPureStateBackendParityTests(unittest.TestCase):
             numpy_baseline.predict_batch(dataset.states),
             atol=1e-10,
         )
+
+    def test_batched_partial_trace_matches_stacked_unbatched_results(self) -> None:
+        import torch
+
+        zero_zero = torch.tensor((1.0, 0.0, 0.0, 0.0), dtype=torch.complex128)
+        singlet = torch.tensor(
+            (0.0, 1.0 / np.sqrt(2.0), -1.0 / np.sqrt(2.0), 0.0),
+            dtype=torch.complex128,
+        )
+        states = torch.stack((zero_zero, singlet), dim=0)
+
+        batched_density = statevectors_to_density_matrices(states)
+        batched_reduced = partial_trace_density_matrix(
+            batched_density,
+            num_qubits=2,
+            traced_out_sites=(1,),
+        )
+
+        expected = torch.stack(
+            [
+                partial_trace_density_matrix(
+                    statevector_to_density_matrix(state),
+                    num_qubits=2,
+                    traced_out_sites=(1,),
+                )
+                for state in states
+            ],
+            dim=0,
+        )
+
+        torch.testing.assert_close(batched_reduced, expected)
 
     def test_trainer_evaluate_matches_numpy_backend(self) -> None:
         dataset_bundle = generate_dataset(HeisenbergDatasetConfig(num_qubits=4, num_points=5, split_seed=11))

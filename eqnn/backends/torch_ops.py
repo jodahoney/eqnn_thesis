@@ -61,10 +61,14 @@ def partial_trace_density_matrix(
     _require_torch()
     traced_out = sorted(set(int(site) for site in traced_out_sites))
     expected_dimension = 1 << num_qubits
-    if density_matrix.shape != (expected_dimension, expected_dimension):
+    if density_matrix.ndim < 2 or tuple(density_matrix.shape[-2:]) != (
+        expected_dimension,
+        expected_dimension,
+    ):
         raise ValueError(
             "density_matrix shape does not match the provided num_qubits: "
-            f"expected {(expected_dimension, expected_dimension)}, got {tuple(density_matrix.shape)}"
+            f"expected trailing shape {(expected_dimension, expected_dimension)}, "
+            f"got {tuple(density_matrix.shape)}"
         )
 
     batch_shape = tuple(density_matrix.shape[:-2])
