@@ -1,0 +1,287 @@
+{
+  "classification_threshold": 0.5,
+  "dataset_metadata": {
+    "assumptions": [
+      "The bond between sites 0 and 1 has coupling 1.0.",
+      "The bond between sites 1 and 2 has coupling r, and the pattern alternates.",
+      "Samples within exclusion_window of the critical ratio are omitted."
+    ],
+    "boundary": "open",
+    "critical_ratio": 1.0,
+    "dataset_name": "bond_alternating_heisenberg",
+    "diagnostic_window": 0.05,
+    "diagnostics": {
+      "dimerization_feature": {
+        "max": -0.163663417676994,
+        "mean": -0.417909318591958,
+        "min": -0.6546536707079769
+      },
+      "partial_reflection_calibrated": {
+        "max": 0.462910049886276,
+        "mean": 2.636779683484747e-16,
+        "min": -0.4629100498862753
+      },
+      "partial_reflection_imag": {
+        "max": 2.753459909675791e-34,
+        "mean": 6.883649774189478e-35,
+        "min": 0.0
+      },
+      "partial_reflection_real": {
+        "max": 0.4629100498862753,
+        "mean": -2.636779683484747e-16,
+        "min": -0.462910049886276
+      },
+      "primary_singlet_mean": {
+        "max": 0.9909902530309826,
+        "mean": 0.9179093185919581,
+        "min": 0.8273268353539884
+      },
+      "secondary_singlet_mean": {
+        "max": 0.6636634176769944,
+        "mean": 0.5000000000000001,
+        "min": 0.3363365823230058
+      }
+    },
+    "eigensolver_requested": "auto",
+    "eigensolver_resolved": "dense",
+    "exclusion_window": 0.05,
+    "hilbert_dimension": 16,
+    "labeling_strategy": "ratio_threshold",
+    "num_qubits": 4,
+    "num_requested_points": 5,
+    "num_total_samples": 4,
+    "partial_reflection_pairs": 1,
+    "phase_labels": {
+      "0": "coupling_ratio < critical_ratio",
+      "1": "coupling_ratio > critical_ratio"
+    },
+    "ratio_max": 1.6,
+    "ratio_min": 0.4,
+    "reference_phase_labels": {
+      "partial_reflection": {
+        "agreement_with_ratio_threshold_on_valid_samples": 1.0,
+        "available": true,
+        "label_histogram": {
+          "0": 2,
+          "1": 2
+        },
+        "num_excluded_by_diagnostic_window": 0
+      },
+      "ratio_threshold": {
+        "label_histogram": {
+          "0": 2,
+          "1": 2
+        }
+      }
+    },
+    "split_seed": 0,
+    "test_label_histogram": {
+      "0": 1,
+      "1": 1
+    },
+    "test_size": 2,
+    "train_fraction": 0.8,
+    "train_label_histogram": {
+      "0": 1,
+      "1": 1
+    },
+    "train_size": 2
+  },
+  "experiment_config": {
+    "backend_name": "numpy_pure",
+    "boundary": "open",
+    "min_readout_qubits": null,
+    "model_family": "su2_qcnn",
+    "num_qubits": 4,
+    "parity_sequence": [
+      "even",
+      "odd"
+    ],
+    "pooling_keep": "left",
+    "pooling_mode": "partial_trace",
+    "readout_mode": "swap",
+    "shared_convolution_parameter": true
+  },
+  "experiment_name": "backend_benchmark_numpy_pure",
+  "history": {
+    "accuracy": [
+      0.5,
+      0.5
+    ],
+    "best_accuracy": 0.5,
+    "best_loss": 0.8937544409243993,
+    "best_parameters": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "best_restart": 0,
+    "best_threshold": 0.5,
+    "final_parameters": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "final_threshold": 0.5,
+    "initial_parameters": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "loss": [
+      0.8937544409243993,
+      0.8937544409243993
+    ],
+    "restart_histories": [
+      {
+        "accuracy": [
+          0.5,
+          0.5
+        ],
+        "best_accuracy": 0.5,
+        "best_loss": 0.8937544409243993,
+        "best_parameters": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "best_threshold": 0.5,
+        "final_parameters": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "final_threshold": 0.5,
+        "initial_parameters": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "loss": [
+          0.8937544409243993,
+          0.8937544409243993
+        ],
+        "threshold": [
+          0.5,
+          0.5
+        ]
+      }
+    ],
+    "threshold": [
+      0.5,
+      0.5
+    ]
+  },
+  "output_dir": "/scratch/users/jdehoney/eqnn_thesis/data/backend_benchmarks/smoke_torch/experiments/numpy_pure",
+  "parameter_count": 3,
+  "runtime_profile": {
+    "experiment.build_model": {
+      "count": 1,
+      "mean_seconds": 0.00010649114847183228,
+      "total_seconds": 0.00010649114847183228
+    },
+    "experiment.build_trainer": {
+      "count": 1,
+      "mean_seconds": 2.4531036615371704e-06,
+      "total_seconds": 2.4531036615371704e-06
+    },
+    "experiment.final_test_evaluate": {
+      "count": 1,
+      "mean_seconds": 0.0011119730770587921,
+      "total_seconds": 0.0011119730770587921
+    },
+    "experiment.final_train_evaluate": {
+      "count": 1,
+      "mean_seconds": 0.0012028096243739128,
+      "total_seconds": 0.0012028096243739128
+    },
+    "experiment.prepare_output_dir": {
+      "count": 1,
+      "mean_seconds": 0.0008416036143898964,
+      "total_seconds": 0.0008416036143898964
+    },
+    "experiment.test_predict": {
+      "count": 1,
+      "mean_seconds": 0.0020851651206612587,
+      "total_seconds": 0.0020851651206612587
+    },
+    "experiment.train_fit": {
+      "count": 1,
+      "mean_seconds": 0.005877722054719925,
+      "total_seconds": 0.005877722054719925
+    },
+    "experiment.train_predict": {
+      "count": 1,
+      "mean_seconds": 0.002102079801261425,
+      "total_seconds": 0.002102079801261425
+    },
+    "experiment.write_artifacts": {
+      "count": 1,
+      "mean_seconds": 0.004638737998902798,
+      "total_seconds": 0.004638737998902798
+    },
+    "train.backward_gradient": {
+      "count": 1,
+      "mean_seconds": 0.0014441050589084625,
+      "total_seconds": 0.0014441050589084625
+    },
+    "train.epoch_evaluate": {
+      "count": 1,
+      "mean_seconds": 0.001183459535241127,
+      "total_seconds": 0.001183459535241127
+    },
+    "train.forward_loss": {
+      "count": 4,
+      "mean_seconds": 6.509944796562195e-07,
+      "total_seconds": 2.603977918624878e-06
+    },
+    "train.forward_predict": {
+      "count": 4,
+      "mean_seconds": 0.0015513775870203972,
+      "total_seconds": 0.006205510348081589
+    },
+    "train.initial_evaluate": {
+      "count": 1,
+      "mean_seconds": 0.0027574915438890457,
+      "total_seconds": 0.0027574915438890457
+    },
+    "train.optimizer_step": {
+      "count": 1,
+      "mean_seconds": 0.00034699495881795883,
+      "total_seconds": 0.00034699495881795883
+    },
+    "train.threshold_update": {
+      "count": 1,
+      "mean_seconds": 1.1213123798370361e-06,
+      "total_seconds": 1.1213123798370361e-06
+    }
+  },
+  "test_metrics": {
+    "accuracy": 0.5,
+    "loss": 1.0815823333563013
+  },
+  "train_metrics": {
+    "accuracy": 0.5,
+    "loss": 0.8937544409243993
+  },
+  "training_config": {
+    "batch_size": null,
+    "beta1": 0.9,
+    "beta2": 0.999,
+    "classification_threshold": 0.5,
+    "epochs": 1,
+    "epsilon": 1e-08,
+    "finite_difference_eps": 0.001,
+    "gradient_backend": "auto",
+    "initialization_noise_scale": 0.05,
+    "initialization_strategy": "current",
+    "learning_rate": 0.05,
+    "loss": "bce",
+    "num_restarts": 1,
+    "optimizer": "adam",
+    "random_seed": null,
+    "restore_best": true,
+    "threshold_critical_ratio": 1.0,
+    "threshold_update": "none"
+  }
+}
