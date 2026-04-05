@@ -1,0 +1,17 @@
+{
+  "backend_name": "torch_pure",
+  "classification_threshold": 0.5803674227938137,
+  "epochs": 50,
+  "experiment_name": "calibration_hea_qcnn_torch_pure_n10_train8_epochs50_seed2",
+  "job_index": 227,
+  "model_family": "hea_qcnn",
+  "num_qubits": 10,
+  "output_dir": "/scratch/users/jdehoney/eqnn_thesis/data/comparisons/eqnn_vs_hea_purestate_50ep_torch_20529347/torch_pure/hea_qcnn/n10/train_size_8/epochs_50/seed_2",
+  "runtime_seconds": 360.59711872413754,
+  "seed": 2,
+  "test_accuracy": 0.99,
+  "test_loss": 0.13720888017497526,
+  "train_accuracy": 1.0,
+  "train_loss": 0.13121889662372296,
+  "train_size": 8
+}

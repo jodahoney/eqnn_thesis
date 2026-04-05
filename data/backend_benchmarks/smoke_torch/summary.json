@@ -1,0 +1,24 @@
+[
+  {
+    "backend_name": "numpy_pure",
+    "model_family": "su2_qcnn",
+    "num_qubits": 4,
+    "output_dir": "/scratch/users/jdehoney/eqnn_thesis/data/backend_benchmarks/smoke_torch/experiments/numpy_pure",
+    "runtime_seconds": 0.018219705671072006,
+    "test_accuracy": 0.5,
+    "test_loss": 1.0815823333563013,
+    "train_accuracy": 0.5,
+    "train_loss": 0.8937544409243993
+  },
+  {
+    "backend_name": "torch_pure",
+    "model_family": "su2_qcnn",
+    "num_qubits": 4,
+    "output_dir": "/scratch/users/jdehoney/eqnn_thesis/data/backend_benchmarks/smoke_torch/experiments/torch_pure",
+    "runtime_seconds": 1.3987993532791734,
+    "test_accuracy": 0.5,
+    "test_loss": 1.0815823333563013,
+    "train_accuracy": 0.5,
+    "train_loss": 0.8937544409243993
+  }
+]

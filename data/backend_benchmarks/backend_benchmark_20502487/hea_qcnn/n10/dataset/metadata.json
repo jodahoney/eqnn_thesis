@@ -1,0 +1,87 @@
+{
+  "assumptions": [
+    "The bond between sites 0 and 1 has coupling 1.0.",
+    "The bond between sites 1 and 2 has coupling r, and the pattern alternates.",
+    "Samples within exclusion_window of the critical ratio are omitted."
+  ],
+  "boundary": "open",
+  "critical_ratio": 1.0,
+  "dataset_name": "bond_alternating_heisenberg",
+  "diagnostic_window": 0.05,
+  "diagnostics": {
+    "dimerization_feature": {
+      "max": 0.30494052523906534,
+      "mean": -0.22665506174607894,
+      "min": -0.64722232301752
+    },
+    "partial_reflection_calibrated": {
+      "max": 0.49207227201784376,
+      "mean": -0.4262104428248736,
+      "min": -0.9968706989237821
+    },
+    "partial_reflection_imag": {
+      "max": 2.7796983313469926e-28,
+      "mean": -9.177607181155234e-28,
+      "min": -7.59957363670661e-27
+    },
+    "partial_reflection_real": {
+      "max": 0.49207227201784376,
+      "mean": -0.4262104428248736,
+      "min": -0.9968706989237821
+    },
+    "primary_singlet_mean": {
+      "max": 0.9851819575105398,
+      "mean": 0.8079948929319538,
+      "min": 0.5508848070018502
+    },
+    "secondary_singlet_mean": {
+      "max": 0.8558253322409155,
+      "mean": 0.5813398311858748,
+      "min": 0.33795963449301986
+    }
+  },
+  "eigensolver_requested": "auto",
+  "eigensolver_resolved": "sparse",
+  "exclusion_window": 0.05,
+  "hilbert_dimension": 1024,
+  "labeling_strategy": "ratio_threshold",
+  "num_qubits": 10,
+  "num_requested_points": 9,
+  "num_total_samples": 8,
+  "partial_reflection_pairs": 4,
+  "phase_labels": {
+    "0": "coupling_ratio < critical_ratio",
+    "1": "coupling_ratio > critical_ratio"
+  },
+  "ratio_max": 1.6,
+  "ratio_min": 0.4,
+  "reference_phase_labels": {
+    "partial_reflection": {
+      "agreement_with_ratio_threshold_on_valid_samples": 0.8571428571428571,
+      "available": true,
+      "label_histogram": {
+        "0": 5,
+        "1": 2
+      },
+      "num_excluded_by_diagnostic_window": 1
+    },
+    "ratio_threshold": {
+      "label_histogram": {
+        "0": 4,
+        "1": 4
+      }
+    }
+  },
+  "split_seed": 0,
+  "test_label_histogram": {
+    "0": 1,
+    "1": 1
+  },
+  "test_size": 2,
+  "train_fraction": 0.8,
+  "train_label_histogram": {
+    "0": 3,
+    "1": 3
+  },
+  "train_size": 6
+}

@@ -1,0 +1,3 @@
+backend_name,model_family,num_qubits,train_accuracy,train_loss,test_accuracy,test_loss,runtime_seconds,output_dir
+numpy_pure,su2_qcnn,4,0.5,0.8937544409243993,0.5,1.0815823333563013,0.018219705671072006,/scratch/users/jdehoney/eqnn_thesis/data/backend_benchmarks/smoke_torch/experiments/numpy_pure
+torch_pure,su2_qcnn,4,0.5,0.8937544409243993,0.5,1.0815823333563013,1.3987993532791734,/scratch/users/jdehoney/eqnn_thesis/data/backend_benchmarks/smoke_torch/experiments/torch_pure
