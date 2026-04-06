@@ -15,18 +15,10 @@
   "left_ratio_min": 0.0,
   "loss": "mse",
   "model_families": [
-    "su2_qcnn",
-    "hea_qcnn"
+    "su2_qcnn"
   ],
   "num_qubits_values": [
-    6,
-    7,
-    8,
-    9,
-    10,
-    11,
-    12,
-    13
+    12
   ],
   "optimizer": "adam",
   "pooling_keep": "left",
@@ -42,11 +34,6 @@
   "threshold_critical_ratio": 1.0,
   "threshold_update": "paper_nearest_critical",
   "train_sizes": [
-    2,
-    4,
-    6,
-    8,
-    10,
-    12
+    6
   ]
 }
