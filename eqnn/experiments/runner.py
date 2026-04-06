@@ -28,6 +28,7 @@ from eqnn.models import (
     SU2QCNN,
     TrainableModel,
 )
+from eqnn.noise import NoiseConfig
 from eqnn.training import Trainer, TrainingConfig
 from eqnn.utils.timing import RuntimeProfile, timed
 
@@ -131,6 +132,16 @@ def build_model(
 
 
 def build_backend(name: str) -> QCNNBackend:
+    return build_backend_with_options(name)
+
+
+def build_backend_with_options(
+    name: str,
+    *,
+    noise_config: NoiseConfig | None = None,
+) -> QCNNBackend:
+    if noise_config is not None and name != "qiskit_mixed":
+        raise ValueError("noise_config is only supported with backend_name='qiskit_mixed'")
     if name == "numpy_pure":
         return NumpyPureStateBackend()
     if name == "torch_pure":
@@ -138,7 +149,7 @@ def build_backend(name: str) -> QCNNBackend:
     if name == "qiskit_pure":
         return QiskitPureStateBackend()
     if name == "qiskit_mixed":
-        return QiskitMixedStateBackend()
+        return QiskitMixedStateBackend(noise_config=noise_config)
     raise ValueError("backend name must be 'numpy_pure', 'torch_pure', 'qiskit_pure', or 'qiskit_mixed'")
 
 

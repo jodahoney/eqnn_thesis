@@ -15,10 +15,12 @@ from eqnn.experiments import (
     BenchmarkSweepConfig,
     CalibrationSweepConfig,
     ExperimentConfig,
+    NoisyComparisonConfig,
     PaperReproductionConfig,
     run_backend_benchmark,
     run_benchmark_sweep,
     run_calibration_sweep,
+    run_noisy_comparison,
     run_paper_reproduction_suite,
     run_training_experiment,
     summarize_experiment_directory,
@@ -202,6 +204,59 @@ def build_parser() -> argparse.ArgumentParser:
     calibration_parser.add_argument("--profile-json", type=Path, default=None)
     calibration_parser.add_argument("--output-dir", type=Path, required=True)
     calibration_parser.set_defaults(handler=_handle_run_calibration_sweep)
+
+    noisy_parser = subparsers.add_parser(
+        "run-noisy-comparison",
+        help="Run a small noisy mixed-state comparison sweep with the Qiskit backend.",
+    )
+    noisy_parser.add_argument(
+        "--model-families",
+        nargs="+",
+        choices=("su2_qcnn", "hea_qcnn", "baseline_qcnn"),
+        default=("su2_qcnn", "hea_qcnn"),
+    )
+    noisy_parser.add_argument("--num-qubits-values", type=int, nargs="+", default=(4, 6))
+    noisy_parser.add_argument("--train-sizes", type=int, nargs="+", default=(4, 8))
+    noisy_parser.add_argument("--epochs-values", type=int, nargs="+", default=(10,))
+    noisy_parser.add_argument("--random-seeds", type=int, nargs="+", default=(0, 1))
+    noisy_parser.add_argument(
+        "--backend-name",
+        choices=("qiskit_mixed",),
+        default="qiskit_mixed",
+    )
+    noisy_parser.add_argument(
+        "--noise-model-name",
+        choices=("none", "depolarizing", "amplitude_damping", "phase_damping"),
+        default="depolarizing",
+    )
+    noisy_parser.add_argument("--noise-strength-values", type=float, nargs="+", default=(0.0, 0.001, 0.005, 0.01))
+    noisy_parser.add_argument("--learning-rate", type=float, default=5e-2)
+    noisy_parser.add_argument(
+        "--gradient-backend",
+        choices=("auto", "exact", "finite_difference"),
+        default="finite_difference",
+    )
+    noisy_parser.add_argument(
+        "--initialization-strategy",
+        choices=("current", "noisy_current"),
+        default="noisy_current",
+    )
+    noisy_parser.add_argument("--initialization-noise-scale", type=float, default=5e-2)
+    noisy_parser.add_argument("--critical-ratio", type=float, default=1.0)
+    noisy_parser.add_argument("--left-ratio-min", type=float, default=0.0)
+    noisy_parser.add_argument("--right-ratio-max", type=float, default=2.0)
+    noisy_parser.add_argument("--dense-test-points", type=int, default=101)
+    noisy_parser.add_argument(
+        "--eigensolver",
+        choices=("auto", "dense", "sparse"),
+        default="auto",
+    )
+    noisy_parser.add_argument("--job-index", type=int, default=None)
+    noisy_parser.add_argument("--aggregate-only", action="store_true")
+    noisy_parser.add_argument("--force-rerun", action="store_true")
+    noisy_parser.add_argument("--profile-json", type=Path, default=None)
+    noisy_parser.add_argument("--output-dir", type=Path, required=True)
+    noisy_parser.set_defaults(handler=_handle_run_noisy_comparison)
 
     reproduction_parser = subparsers.add_parser(
         "run-paper-reproduction",
@@ -441,6 +496,50 @@ def _handle_run_calibration_sweep(args: argparse.Namespace) -> int:
         return 0
 
     print(f"Aggregated {len(results['runs'])} calibration runs")
+    print(f"Summary written to {(args.output_dir / 'summary.csv').resolve()}")
+    return 0
+
+
+def _handle_run_noisy_comparison(args: argparse.Namespace) -> int:
+    profile = RuntimeProfile()
+    config = NoisyComparisonConfig(
+        model_families=tuple(args.model_families),
+        num_qubits_values=tuple(args.num_qubits_values),
+        train_sizes=tuple(args.train_sizes),
+        epochs_values=tuple(args.epochs_values),
+        random_seeds=tuple(args.random_seeds),
+        backend_name=args.backend_name,
+        noise_model_name=args.noise_model_name,
+        noise_strength_values=tuple(args.noise_strength_values),
+        learning_rate=args.learning_rate,
+        gradient_backend=args.gradient_backend,
+        initialization_strategy=args.initialization_strategy,
+        initialization_noise_scale=args.initialization_noise_scale,
+        critical_ratio=args.critical_ratio,
+        left_ratio_min=args.left_ratio_min,
+        right_ratio_max=args.right_ratio_max,
+        dense_test_points=args.dense_test_points,
+        eigensolver=args.eigensolver,
+    )
+    results = run_noisy_comparison(
+        config,
+        args.output_dir,
+        job_index=args.job_index,
+        aggregate_only=args.aggregate_only,
+        force_rerun=args.force_rerun,
+        profile=profile,
+    )
+
+    if args.profile_json is not None:
+        args.profile_json.parent.mkdir(parents=True, exist_ok=True)
+        args.profile_json.write_text(json.dumps(profile.summary(), indent=2, sort_keys=True) + "\n")
+
+    if args.job_index is not None and not args.aggregate_only:
+        print(f"Completed noisy comparison job index {args.job_index}")
+        print(f"Run artifacts written under {args.output_dir.resolve()}")
+        return 0
+
+    print(f"Aggregated {len(results['runs'])} noisy comparison runs")
     print(f"Summary written to {(args.output_dir / 'summary.csv').resolve()}")
     return 0
 
