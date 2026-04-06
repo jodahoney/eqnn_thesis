@@ -121,7 +121,7 @@ def build_parser() -> argparse.ArgumentParser:
     backend_benchmark_parser.add_argument(
         "--backends",
         nargs="+",
-        choices=("numpy_pure", "torch_pure"),
+        choices=("numpy_pure", "torch_pure", "qiskit_pure", "qiskit_mixed"),
         default=("numpy_pure", "torch_pure"),
     )
     backend_benchmark_parser.add_argument("--num-qubits", type=int, required=True)
@@ -193,7 +193,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     calibration_parser.add_argument(
         "--backend-name",
-        choices=("numpy_pure", "torch_pure"),
+        choices=("numpy_pure", "torch_pure", "qiskit_pure", "qiskit_mixed"),
         default="numpy_pure",
     )
     calibration_parser.add_argument("--job-index", type=int, default=None)
@@ -566,7 +566,7 @@ def _add_model_args(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--backend",
-        choices=("numpy_pure", "torch_pure"),
+        choices=("numpy_pure", "torch_pure", "qiskit_pure", "qiskit_mixed"),
         default="numpy_pure",
     )
     parser.add_argument("--min-readout-qubits", type=int, default=None)

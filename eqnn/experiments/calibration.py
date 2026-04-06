@@ -61,8 +61,10 @@ class CalibrationSweepConfig:
         invalid = tuple(family for family in self.model_families if family not in allowed_families)
         if invalid:
             raise ValueError(f"Unsupported model_families: {invalid}")
-        if self.backend_name not in {"numpy_pure", "torch_pure"}:
-            raise ValueError("backend_name must be 'numpy_pure' or 'torch_pure'")
+        if self.backend_name not in {"numpy_pure", "torch_pure", "qiskit_pure", "qiskit_mixed"}:
+            raise ValueError(
+                "backend_name must be 'numpy_pure', 'torch_pure', 'qiskit_pure', or 'qiskit_mixed'"
+            )
         if self.loss != "mse":
             raise ValueError("Calibration sweeps are locked to loss='mse'")
         if self.batch_size != 2:

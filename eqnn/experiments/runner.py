@@ -10,7 +10,13 @@ from typing import Any
 
 import numpy as np
 
-from eqnn.backends import NumpyPureStateBackend, QCNNBackend, TorchPureStateBackend
+from eqnn.backends import (
+    NumpyPureStateBackend,
+    QCNNBackend,
+    QiskitMixedStateBackend,
+    QiskitPureStateBackend,
+    TorchPureStateBackend,
+)
 from eqnn.datasets.heisenberg import DatasetBundle, HeisenbergDatasetConfig, generate_dataset
 from eqnn.datasets.io import load_dataset_bundle, save_dataset_bundle
 from eqnn.models import (
@@ -42,8 +48,10 @@ class ExperimentConfig:
     def __post_init__(self) -> None:
         if self.model_family not in {"su2_qcnn", "baseline_qcnn", "hea_qcnn"}:
             raise ValueError("model_family must be 'su2_qcnn', 'baseline_qcnn', or 'hea_qcnn'")
-        if self.backend_name not in {"numpy_pure", "torch_pure"}:
-            raise ValueError("backend_name must be 'numpy_pure' or 'torch_pure'")
+        if self.backend_name not in {"numpy_pure", "torch_pure", "qiskit_pure", "qiskit_mixed"}:
+            raise ValueError(
+                "backend_name must be 'numpy_pure', 'torch_pure', 'qiskit_pure', or 'qiskit_mixed'"
+            )
 
 
 @dataclass(frozen=True)
@@ -127,7 +135,11 @@ def build_backend(name: str) -> QCNNBackend:
         return NumpyPureStateBackend()
     if name == "torch_pure":
         return TorchPureStateBackend()
-    raise ValueError("backend name must be 'numpy_pure' or 'torch_pure'")
+    if name == "qiskit_pure":
+        return QiskitPureStateBackend()
+    if name == "qiskit_mixed":
+        return QiskitMixedStateBackend()
+    raise ValueError("backend name must be 'numpy_pure', 'torch_pure', 'qiskit_pure', or 'qiskit_mixed'")
 
 
 def load_or_generate_dataset(

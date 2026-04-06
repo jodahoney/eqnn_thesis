@@ -17,6 +17,10 @@ dependencies = [
 torch = [
   "torch>=2.2,<3",
 ]
+qiskit = [
+  "qiskit>=1.1,<3",
+  "qiskit-aer>=0.14,<1",
+]
 
 [project.scripts]
 eqnn = "eqnn.cli:main"

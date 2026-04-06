@@ -27,7 +27,9 @@ class BackendBenchmarkConfig:
         if not self.backend_names:
             raise ValueError("backend_names must not be empty")
         invalid = tuple(
-            backend_name for backend_name in self.backend_names if backend_name not in {"numpy_pure", "torch_pure"}
+            backend_name
+            for backend_name in self.backend_names
+            if backend_name not in {"numpy_pure", "torch_pure", "qiskit_pure", "qiskit_mixed"}
         )
         if invalid:
             raise ValueError(f"Unsupported backend_names: {invalid}")
