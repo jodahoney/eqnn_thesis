@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from math import cos, sin
 
 import numpy as np
 
@@ -15,6 +16,7 @@ from eqnn.circuits.qiskit_builders import (
 )
 from eqnn.models.base import QCNNForwardPass
 from eqnn.noise import NoiseConfig
+from eqnn.utils.timing import timed
 
 from eqnn.backends.qiskit_pure import QISKIT_AVAILABLE, QiskitPureStateBackend
 
@@ -29,6 +31,8 @@ _IDENTITY_1Q = np.eye(2, dtype=np.complex128)
 _PAULI_X = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
 _PAULI_Y = np.array([[0.0, -1.0j], [1.0j, 0.0]], dtype=np.complex128)
 _PAULI_Z = np.array([[1.0, 0.0], [0.0, -1.0]], dtype=np.complex128)
+_IDENTITY_2Q = np.eye(4, dtype=np.complex128)
+_ZZ = np.kron(_PAULI_Z, _PAULI_Z)
 
 
 class QiskitMixedStateBackend(QiskitPureStateBackend):
@@ -52,32 +56,70 @@ class QiskitMixedStateBackend(QiskitPureStateBackend):
         if self.noise_config.is_noiseless:
             return np.asarray(density_matrix, dtype=np.complex128)
 
-        qiskit_density = DensityMatrix(repo_density_to_qiskit(np.asarray(density_matrix, dtype=np.complex128), num_qubits))
-        active_qubits = active_qubits_for_convolution(convolution)
-        active_pairs = active_pairs_for_convolution(convolution)
+        with timed(self.runtime_profile, "backend.qiskit.apply_noise"):
+            qiskit_density = DensityMatrix(
+                repo_density_to_qiskit(np.asarray(density_matrix, dtype=np.complex128), num_qubits)
+            )
+            active_qubits = active_qubits_for_convolution(convolution)
+            active_pairs = active_pairs_for_convolution(convolution)
 
-        if self.noise_config.noise_model_name == "depolarizing":
-            if self.noise_config.single_qubit_depolarizing_error > 0.0:
-                channel = Kraus(self._single_qubit_depolarizing_kraus(self.noise_config.single_qubit_depolarizing_error))
+            if self.noise_config.noise_model_name == "depolarizing":
+                if self.noise_config.single_qubit_depolarizing_error > 0.0:
+                    channel = Kraus(
+                        self._single_qubit_depolarizing_kraus(self.noise_config.single_qubit_depolarizing_error)
+                    )
+                    for site in active_qubits:
+                        qiskit_density = qiskit_density.evolve(
+                            channel,
+                            qargs=[repo_sites_to_qiskit(num_qubits, (site,))[0]],
+                        )
+                if self.noise_config.two_qubit_depolarizing_error > 0.0:
+                    channel = Kraus(
+                        self._two_qubit_depolarizing_kraus(self.noise_config.two_qubit_depolarizing_error)
+                    )
+                    for pair in active_pairs:
+                        qargs = list(repo_sites_to_qiskit(num_qubits, pair))
+                        qiskit_density = qiskit_density.evolve(channel, qargs=qargs)
+
+            if (
+                self.noise_config.noise_model_name == "amplitude_damping"
+                and self.noise_config.amplitude_damping_gamma > 0.0
+            ):
+                channel = Kraus(self._amplitude_damping_kraus(self.noise_config.amplitude_damping_gamma))
                 for site in active_qubits:
-                    qiskit_density = qiskit_density.evolve(channel, qargs=[repo_sites_to_qiskit(num_qubits, (site,))[0]])
-            if self.noise_config.two_qubit_depolarizing_error > 0.0:
-                channel = Kraus(self._two_qubit_depolarizing_kraus(self.noise_config.two_qubit_depolarizing_error))
+                    qiskit_density = qiskit_density.evolve(
+                        channel,
+                        qargs=[repo_sites_to_qiskit(num_qubits, (site,))[0]],
+                    )
+
+            if (
+                self.noise_config.noise_model_name == "phase_damping"
+                and self.noise_config.phase_damping_gamma > 0.0
+            ):
+                channel = Kraus(self._phase_damping_kraus(self.noise_config.phase_damping_gamma))
+                for site in active_qubits:
+                    qiskit_density = qiskit_density.evolve(
+                        channel,
+                        qargs=[repo_sites_to_qiskit(num_qubits, (site,))[0]],
+                    )
+
+            if (
+                self.noise_config.noise_model_name == "coherent_overrotation"
+                and self.noise_config.coherent_overrotation_angle != 0.0
+            ):
+                channel = Kraus(
+                    [
+                        self._coherent_overrotation_unitary(
+                            self.noise_config.coherent_overrotation_angle,
+                            axis=self.noise_config.coherent_overrotation_axis,
+                        )
+                    ]
+                )
                 for pair in active_pairs:
                     qargs = list(repo_sites_to_qiskit(num_qubits, pair))
                     qiskit_density = qiskit_density.evolve(channel, qargs=qargs)
 
-        if self.noise_config.noise_model_name == "amplitude_damping" and self.noise_config.amplitude_damping_gamma > 0.0:
-            channel = Kraus(self._amplitude_damping_kraus(self.noise_config.amplitude_damping_gamma))
-            for site in active_qubits:
-                qiskit_density = qiskit_density.evolve(channel, qargs=[repo_sites_to_qiskit(num_qubits, (site,))[0]])
-
-        if self.noise_config.noise_model_name == "phase_damping" and self.noise_config.phase_damping_gamma > 0.0:
-            channel = Kraus(self._phase_damping_kraus(self.noise_config.phase_damping_gamma))
-            for site in active_qubits:
-                qiskit_density = qiskit_density.evolve(channel, qargs=[repo_sites_to_qiskit(num_qubits, (site,))[0]])
-
-        return np.asarray(qiskit_density_to_repo(np.asarray(qiskit_density.data), num_qubits), dtype=np.complex128)
+            return np.asarray(qiskit_density_to_repo(np.asarray(qiskit_density.data), num_qubits), dtype=np.complex128)
 
     def _postprocess_forward_pass(self, forward_pass: object) -> object:
         if not isinstance(forward_pass, QCNNForwardPass):
@@ -131,3 +173,10 @@ class QiskitMixedStateBackend(QiskitPureStateBackend):
             np.asarray(((1.0, 0.0), (0.0, np.sqrt(1.0 - gamma))), dtype=np.complex128),
             np.asarray(((0.0, 0.0), (0.0, np.sqrt(gamma))), dtype=np.complex128),
         ]
+
+    @staticmethod
+    def _coherent_overrotation_unitary(angle: float, *, axis: str) -> np.ndarray:
+        if axis != "zz":
+            raise ValueError("coherent_overrotation_axis must currently be 'zz'")
+        half_angle = 0.5 * float(angle)
+        return np.asarray(cos(half_angle) * _IDENTITY_2Q - 1.0j * sin(half_angle) * _ZZ, dtype=np.complex128)

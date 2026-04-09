@@ -12,6 +12,7 @@ from eqnn.circuits.qiskit_builders import (
     repo_density_to_qiskit,
 )
 from eqnn.types import ComplexArray
+from eqnn.utils.timing import RuntimeProfile, timed
 
 try:  # pragma: no cover - exercised when qiskit is installed
     from qiskit.quantum_info import DensityMatrix
@@ -28,6 +29,7 @@ class QiskitPureStateBackend:
                 "QiskitPureStateBackend requires the optional 'qiskit' dependency. "
                 "Install it with `pip install 'eqnn-simulator[qiskit]'`."
             )
+        self.runtime_profile: RuntimeProfile | None = None
 
     @property
     def supports_exact_gradients(self) -> bool:
@@ -114,30 +116,32 @@ class QiskitPureStateBackend:
         state: ComplexArray,
         parameters: np.ndarray,
     ) -> tuple[np.ndarray, int]:
-        current_density = self._coerce_density_matrix(state)
-        current_num_qubits = int(model.block_num_qubits[0])
+        with timed(self.runtime_profile, "backend.qiskit.forward_density"):
+            current_density = self._coerce_density_matrix(state)
+            current_num_qubits = int(model.block_num_qubits[0])
 
-        for block_index, convolution in enumerate(model.convolutions):
-            convolution_parameters = parameters[model.convolution_slices[block_index]]
-            current_density = self._apply_convolution(
-                convolution,
-                current_density,
-                convolution_parameters,
-            )
-            current_density = self._apply_post_convolution_noise(
-                convolution,
-                current_density,
-                current_num_qubits,
-            )
-
-            if block_index < len(model.poolings):
-                pooling = model.poolings[block_index]
-                pooling_parameters = parameters[model.pooling_slices[block_index]]
-                current_density = np.asarray(
-                    pooling.apply(current_density, parameters=pooling_parameters),
-                    dtype=np.complex128,
+            for block_index, convolution in enumerate(model.convolutions):
+                convolution_parameters = parameters[model.convolution_slices[block_index]]
+                current_density = self._apply_convolution(
+                    convolution,
+                    current_density,
+                    convolution_parameters,
                 )
-                current_num_qubits = int(pooling.output_num_qubits)
+                current_density = self._apply_post_convolution_noise(
+                    convolution,
+                    current_density,
+                    current_num_qubits,
+                )
+
+                if block_index < len(model.poolings):
+                    pooling = model.poolings[block_index]
+                    pooling_parameters = parameters[model.pooling_slices[block_index]]
+                    with timed(self.runtime_profile, "backend.qiskit.apply_pooling"):
+                        current_density = np.asarray(
+                            pooling.apply(current_density, parameters=pooling_parameters),
+                            dtype=np.complex128,
+                        )
+                    current_num_qubits = int(pooling.output_num_qubits)
 
         return current_density, current_num_qubits
 
@@ -148,10 +152,12 @@ class QiskitPureStateBackend:
         parameters: np.ndarray,
     ) -> np.ndarray:
         num_qubits = int(convolution.config.num_qubits)
-        circuit = build_convolution_circuit(convolution, parameters)
-        qiskit_density = DensityMatrix(repo_density_to_qiskit(density_matrix, num_qubits))
-        evolved = qiskit_density.evolve(circuit)
-        return np.asarray(qiskit_density_to_repo(np.asarray(evolved.data), num_qubits), dtype=np.complex128)
+        with timed(self.runtime_profile, "backend.qiskit.build_circuit"):
+            circuit = build_convolution_circuit(convolution, parameters)
+        with timed(self.runtime_profile, "backend.qiskit.apply_convolution"):
+            qiskit_density = DensityMatrix(repo_density_to_qiskit(density_matrix, num_qubits))
+            evolved = qiskit_density.evolve(circuit)
+            return np.asarray(qiskit_density_to_repo(np.asarray(evolved.data), num_qubits), dtype=np.complex128)
 
     def _apply_post_convolution_noise(
         self,

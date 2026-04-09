@@ -23,6 +23,7 @@ from eqnn.experiments import (
     run_noisy_comparison,
     run_paper_reproduction_suite,
     run_training_experiment,
+    summarize_noisy_comparison_directory,
     summarize_experiment_directory,
 )
 from eqnn.training import TrainingConfig
@@ -226,10 +227,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     noisy_parser.add_argument(
         "--noise-model-name",
-        choices=("none", "depolarizing", "amplitude_damping", "phase_damping"),
+        choices=("none", "depolarizing", "amplitude_damping", "phase_damping", "dephasing", "coherent_overrotation"),
         default="depolarizing",
     )
-    noisy_parser.add_argument("--noise-strength-values", type=float, nargs="+", default=(0.0, 0.001, 0.005, 0.01))
+    noisy_parser.add_argument(
+        "--noise-strength-values",
+        type=float,
+        nargs="+",
+        default=(0.0, 0.001, 0.005, 0.01, 0.02, 0.05, 0.1),
+    )
+    noisy_parser.add_argument(
+        "--odd-qubits-only",
+        action="store_true",
+        help="Restrict the configured num-qubits sweep to odd system sizes only.",
+    )
     noisy_parser.add_argument("--learning-rate", type=float, default=5e-2)
     noisy_parser.add_argument(
         "--gradient-backend",
@@ -257,6 +268,16 @@ def build_parser() -> argparse.ArgumentParser:
     noisy_parser.add_argument("--profile-json", type=Path, default=None)
     noisy_parser.add_argument("--output-dir", type=Path, required=True)
     noisy_parser.set_defaults(handler=_handle_run_noisy_comparison)
+
+    noisy_summary_parser = subparsers.add_parser(
+        "summarize-noisy-comparison",
+        help="Recursively aggregate completed noisy comparison runs into tidy CSV/JSON outputs.",
+    )
+    noisy_summary_parser.add_argument("--input-dir", type=Path, required=True)
+    noisy_summary_parser.add_argument("--output-json", type=Path, default=None)
+    noisy_summary_parser.add_argument("--output-csv", type=Path, default=None)
+    noisy_summary_parser.add_argument("--runs-output-json", type=Path, default=None)
+    noisy_summary_parser.set_defaults(handler=_handle_summarize_noisy_comparison)
 
     reproduction_parser = subparsers.add_parser(
         "run-paper-reproduction",
@@ -511,6 +532,7 @@ def _handle_run_noisy_comparison(args: argparse.Namespace) -> int:
         backend_name=args.backend_name,
         noise_model_name=args.noise_model_name,
         noise_strength_values=tuple(args.noise_strength_values),
+        odd_qubits_only=bool(args.odd_qubits_only),
         learning_rate=args.learning_rate,
         gradient_backend=args.gradient_backend,
         initialization_strategy=args.initialization_strategy,
@@ -541,6 +563,18 @@ def _handle_run_noisy_comparison(args: argparse.Namespace) -> int:
 
     print(f"Aggregated {len(results['runs'])} noisy comparison runs")
     print(f"Summary written to {(args.output_dir / 'summary.csv').resolve()}")
+    return 0
+
+
+def _handle_summarize_noisy_comparison(args: argparse.Namespace) -> int:
+    result = summarize_noisy_comparison_directory(
+        args.input_dir,
+        output_json=args.output_json,
+        output_csv=args.output_csv,
+        runs_output_json=args.runs_output_json,
+    )
+    print(f"Aggregated {len(result['runs'])} noisy comparison runs")
+    print(f"Summary written to {result['summary_output_csv']}")
     return 0
 
 

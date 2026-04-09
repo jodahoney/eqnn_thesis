@@ -10,7 +10,7 @@ from eqnn.backends import NumpyPureStateBackend, QISKIT_AVAILABLE, QiskitMixedSt
 from eqnn.datasets.heisenberg import DatasetSplit, HeisenbergDatasetConfig, generate_dataset
 from eqnn.experiments.runner import ExperimentConfig, build_backend, run_training_experiment
 from eqnn.models import HEAQCNN, HEAQCNNConfig, QCNNConfig, SU2QCNN
-from eqnn.noise import NoiseConfig
+from eqnn.noise import NoiseConfig, noise_config_from_strength
 from eqnn.physics.heisenberg import BondAlternatingHeisenbergHamiltonian
 from eqnn.training import TrainingConfig
 
@@ -84,6 +84,34 @@ class QiskitBackendTests(unittest.TestCase):
         self.assertTrue(np.isfinite(forward.probability))
         self.assertGreaterEqual(forward.probability, 0.0)
         self.assertLessEqual(forward.probability, 1.0)
+
+    def test_qiskit_mixed_zero_noise_matches_qiskit_pure(self) -> None:
+        hamiltonian = BondAlternatingHeisenbergHamiltonian(num_qubits=4)
+        _, state = hamiltonian.ground_state(0.9)
+        parameters = np.asarray((0.05, -0.03, 0.08), dtype=np.float64)
+
+        pure_model = SU2QCNN(
+            QCNNConfig(num_qubits=4),
+            parameters=parameters,
+            backend=QiskitPureStateBackend(),
+        )
+        mixed_model = SU2QCNN(
+            QCNNConfig(num_qubits=4),
+            parameters=parameters,
+            backend=QiskitMixedStateBackend(
+                noise_config=noise_config_from_strength("depolarizing", 0.0)
+            ),
+        )
+
+        pure_forward = pure_model.forward(state)
+        mixed_forward = mixed_model.forward(state)
+
+        np.testing.assert_allclose(
+            mixed_forward.final_density_matrix,
+            pure_forward.final_density_matrix,
+            atol=1e-10,
+        )
+        self.assertAlmostEqual(mixed_forward.probability, pure_forward.probability, places=10)
 
     def test_qiskit_mixed_noisy_runner_smoke_writes_artifacts(self) -> None:
         dataset = generate_dataset(HeisenbergDatasetConfig(num_qubits=4, num_points=5, split_seed=9))

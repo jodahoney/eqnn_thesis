@@ -181,6 +181,9 @@ def run_training_experiment(
     with timed(profile, "experiment.build_model"):
         model = build_model(experiment_config, backend=backend)
 
+    if profile is not None and hasattr(model, "backend") and hasattr(model.backend, "runtime_profile"):
+        model.backend.runtime_profile = profile
+
     with timed(profile, "experiment.build_trainer"):
         trainer = Trainer(training_config)
 
@@ -246,7 +249,9 @@ def run_training_experiment(
         result["output_dir"] = str(output_path.resolve())
 
     if profile is not None:
-        result["runtime_profile"] = _serialize_for_json(profile.summary())
+        runtime_profile_summary = profile.summary()
+        result["runtime_profile"] = _serialize_for_json(runtime_profile_summary)
+        result["runtime_breakdown"] = _serialize_for_json(_runtime_breakdown(runtime_profile_summary))
 
     if output_path is not None:
         (output_path / "metrics.json").write_text(
@@ -386,6 +391,36 @@ def _serialize_for_json(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [_serialize_for_json(item) for item in value]
     return value
+
+
+def _runtime_total_seconds(
+    summary: dict[str, dict[str, float | int]],
+    *keys: str,
+) -> float:
+    total = 0.0
+    for key in keys:
+        total += float(summary.get(key, {}).get("total_seconds", 0.0))
+    return total
+
+
+def _runtime_breakdown(summary: dict[str, dict[str, float | int]]) -> dict[str, float]:
+    return {
+        "build_time_seconds": _runtime_total_seconds(
+            summary,
+            "experiment.build_model",
+            "experiment.build_trainer",
+        ),
+        "forward_time_seconds": _runtime_total_seconds(
+            summary,
+            "train.forward_predict",
+            "train.forward_loss",
+            "experiment.train_predict",
+            "experiment.test_predict",
+        ),
+        "gradient_time_seconds": _runtime_total_seconds(summary, "train.backward_gradient"),
+        "total_training_time_seconds": _runtime_total_seconds(summary, "experiment.train_fit"),
+        "total_run_time_seconds": _runtime_total_seconds(summary, "experiment.total"),
+    }
 
 
 def _default_experiment_name(config: ExperimentConfig) -> str:

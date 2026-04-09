@@ -21,6 +21,7 @@ from eqnn.experiments.noisy_comparison import (
     noisy_comparison_job_from_index,
     run_noisy_comparison,
 )
+from eqnn.experiments.noisy_summary import summarize_noisy_comparison_directory
 from eqnn.experiments.reproduction import (
     PaperDatasetConfig,
     PaperReproductionConfig,
@@ -68,5 +69,6 @@ __all__ = [
     "run_noisy_comparison",
     "run_paper_reproduction_suite",
     "run_training_experiment",
+    "summarize_noisy_comparison_directory",
     "summarize_experiment_directory",
 ]

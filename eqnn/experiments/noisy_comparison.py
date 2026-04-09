@@ -14,7 +14,7 @@ import numpy as np
 from eqnn.datasets.heisenberg import DatasetBundle
 from eqnn.experiments.reproduction import PaperDatasetConfig, generate_paper_dataset
 from eqnn.experiments.runner import ExperimentConfig, build_backend_with_options, run_training_experiment
-from eqnn.noise import NoiseConfig
+from eqnn.noise import SUPPORTED_NOISE_MODELS, NoiseConfig, noise_config_from_strength
 from eqnn.training import TrainingConfig
 from eqnn.utils.timing import RuntimeProfile, timed
 
@@ -23,12 +23,13 @@ from eqnn.utils.timing import RuntimeProfile, timed
 class NoisyComparisonConfig:
     model_families: tuple[str, ...] = ("su2_qcnn", "hea_qcnn")
     num_qubits_values: tuple[int, ...] = (4, 6)
-    train_sizes: tuple[int, ...] = (4, 8)
+    train_sizes: tuple[int, ...] = (4, 8, 12)
     epochs_values: tuple[int, ...] = (10,)
     random_seeds: tuple[int, ...] = (0, 1)
     backend_name: str = "qiskit_mixed"
     noise_model_name: str = "depolarizing"
-    noise_strength_values: tuple[float, ...] = (0.0, 0.001, 0.005, 0.01)
+    noise_strength_values: tuple[float, ...] = (0.0, 0.001, 0.005, 0.01, 0.02, 0.05, 0.1)
+    odd_qubits_only: bool = False
     learning_rate: float = 5e-2
     gradient_backend: str = "finite_difference"
     initialization_strategy: str = "noisy_current"
@@ -68,10 +69,8 @@ class NoisyComparisonConfig:
             raise ValueError(f"Unsupported model_families: {invalid}")
         if self.backend_name != "qiskit_mixed":
             raise ValueError("Noisy mixed-state comparisons currently require backend_name='qiskit_mixed'")
-        if self.noise_model_name not in {"none", "depolarizing", "amplitude_damping", "phase_damping"}:
-            raise ValueError(
-                "noise_model_name must be 'none', 'depolarizing', 'amplitude_damping', or 'phase_damping'"
-            )
+        canonical_noise_model = NoiseConfig(noise_model_name=self.noise_model_name).noise_model_name
+        object.__setattr__(self, "noise_model_name", canonical_noise_model)
         if self.loss != "mse":
             raise ValueError("Noisy comparisons are locked to loss='mse'")
         if self.batch_size != 2:
@@ -84,9 +83,32 @@ class NoisyComparisonConfig:
             raise ValueError("Noisy comparisons are currently locked to pooling_mode='partial_trace'")
         if self.readout_mode != "swap":
             raise ValueError("Noisy comparisons are currently locked to readout_mode='swap'")
+        resolved_num_qubits = self.resolved_num_qubits_values
+        if not resolved_num_qubits:
+            raise ValueError("No odd qubit counts remain after applying odd_qubits_only=True")
+        for value in resolved_num_qubits:
+            if int(value) < 2:
+                raise ValueError("num_qubits_values must be integers at least 2")
+        for train_size in self.train_sizes:
+            if int(train_size) < 2 or int(train_size) % 2 != 0:
+                raise ValueError("train_sizes must be even integers at least 2")
         for value in self.noise_strength_values:
-            if float(value) < 0.0:
-                raise ValueError("noise strengths must be non-negative")
+            if canonical_noise_model == "none" and float(value) != 0.0:
+                raise ValueError("noise strengths must be exactly 0.0 when noise_model_name='none'")
+            if canonical_noise_model == "coherent_overrotation":
+                if not np.isfinite(float(value)):
+                    raise ValueError("noise strengths must be finite for coherent_overrotation")
+            elif not 0.0 <= float(value) <= 1.0:
+                raise ValueError(
+                    f"noise strengths must lie in [0, 1] for noise_model_name='{canonical_noise_model}'"
+                )
+
+    @property
+    def resolved_num_qubits_values(self) -> tuple[int, ...]:
+        values = tuple(int(value) for value in self.num_qubits_values)
+        if not self.odd_qubits_only:
+            return values
+        return tuple(value for value in values if value % 2 == 1)
 
 
 @dataclass(frozen=True)
@@ -105,7 +127,7 @@ def enumerate_noisy_comparison_jobs(config: NoisyComparisonConfig) -> list[Noisy
     for index, (model_family, num_qubits, train_size, epochs, noise_strength, seed) in enumerate(
         product(
             config.model_families,
-            config.num_qubits_values,
+            config.resolved_num_qubits_values,
             config.train_sizes,
             config.epochs_values,
             config.noise_strength_values,
@@ -133,25 +155,6 @@ def noisy_comparison_job_from_index(config: NoisyComparisonConfig, index: int) -
     return jobs[index]
 
 
-def noise_config_from_strength(noise_model_name: str, noise_strength: float) -> NoiseConfig:
-    strength = float(noise_strength)
-    if noise_model_name == "none":
-        return NoiseConfig(noise_model_name="none")
-    if noise_model_name == "depolarizing":
-        return NoiseConfig(
-            noise_model_name="depolarizing",
-            single_qubit_depolarizing_error=strength,
-            two_qubit_depolarizing_error=strength,
-        )
-    if noise_model_name == "amplitude_damping":
-        return NoiseConfig(noise_model_name="amplitude_damping", amplitude_damping_gamma=strength)
-    if noise_model_name == "phase_damping":
-        return NoiseConfig(noise_model_name="phase_damping", phase_damping_gamma=strength)
-    raise ValueError(
-        "noise_model_name must be 'none', 'depolarizing', 'amplitude_damping', or 'phase_damping'"
-    )
-
-
 def run_noisy_comparison(
     config: NoisyComparisonConfig,
     output_dir: str | Path,
@@ -167,7 +170,18 @@ def run_noisy_comparison(
 
     with timed(profile, "noisy.write_config"):
         (output_path / "noisy_comparison_config.json").write_text(
-            json.dumps(asdict(config), indent=2, sort_keys=True) + "\n"
+            json.dumps(
+                _serialize_for_json(
+                    {
+                        **asdict(config),
+                        "resolved_num_qubits_values": list(config.resolved_num_qubits_values),
+                        "supported_noise_models": list(SUPPORTED_NOISE_MODELS),
+                    }
+                ),
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
         )
 
     dataset_cache: dict[tuple[int, int], DatasetBundle] = {}
@@ -260,10 +274,23 @@ def aggregate_noisy_comparison_runs(run_rows: list[dict[str, Any]]) -> list[dict
             "train_loss",
             "test_loss",
             "classification_threshold",
+            "build_time_seconds",
+            "forward_time_seconds",
+            "gradient_time_seconds",
+            "total_training_time_seconds",
         ):
-            values = np.asarray([float(row[metric_name]) for row in rows], dtype=np.float64)
-            summary_row[f"mean_{metric_name}"] = float(np.mean(values))
-            summary_row[f"variance_{metric_name}"] = float(np.var(values))
+            metric_values = [
+                float(row[metric_name])
+                for row in rows
+                if row.get(metric_name) is not None
+            ]
+            if metric_values:
+                values = np.asarray(metric_values, dtype=np.float64)
+                summary_row[f"mean_{metric_name}"] = float(np.mean(values))
+                summary_row[f"variance_{metric_name}"] = float(np.var(values))
+            else:
+                summary_row[f"mean_{metric_name}"] = None
+                summary_row[f"variance_{metric_name}"] = None
 
         runtime_values = [
             float(row["runtime_seconds"])
@@ -363,7 +390,9 @@ def _run_noisy_comparison_job(
                     {
                         "job": asdict(job),
                         "config": asdict(config),
-                        "noise_config": asdict(resolved_noise_config),
+                        "resolved_num_qubits_values": list(config.resolved_num_qubits_values),
+                        "noise_config": resolved_noise_config.to_dict(),
+                        "noise_metadata": resolved_noise_config.to_metadata(),
                     }
                 ),
                 indent=2,
@@ -384,6 +413,7 @@ def _run_noisy_comparison_job(
 
     runtime_summary = run_profile.summary()
     runtime_seconds = float(runtime_summary["noisy.single_run"]["total_seconds"])
+    runtime_breakdown = dict(result.get("runtime_breakdown", {}))
     run_row = {
         "job_index": int(job.index),
         "experiment_name": str(result["experiment_name"]),
@@ -392,7 +422,7 @@ def _run_noisy_comparison_job(
         "num_qubits": int(job.num_qubits),
         "train_size": int(job.train_size),
         "epochs": int(job.epochs),
-        "noise_model_name": str(config.noise_model_name),
+        "noise_model_name": str(resolved_noise_config.noise_model_name),
         "noise_strength": float(job.noise_strength),
         "seed": int(job.seed),
         "train_accuracy": float(result["train_metrics"]["accuracy"]),
@@ -400,10 +430,36 @@ def _run_noisy_comparison_job(
         "train_loss": float(result["train_metrics"]["loss"]),
         "test_loss": float(result["test_metrics"]["loss"]),
         "classification_threshold": float(result["classification_threshold"]),
+        "build_time_seconds": float(runtime_breakdown.get("build_time_seconds", 0.0)),
+        "forward_time_seconds": float(runtime_breakdown.get("forward_time_seconds", 0.0)),
+        "gradient_time_seconds": float(runtime_breakdown.get("gradient_time_seconds", 0.0)),
+        "total_training_time_seconds": float(runtime_breakdown.get("total_training_time_seconds", 0.0)),
         "runtime_seconds": runtime_seconds,
         "output_dir": str(run_output_dir.resolve()),
     }
+    run_metadata = {
+        "job": asdict(job),
+        "config": asdict(config),
+        "resolved_num_qubits_values": list(config.resolved_num_qubits_values),
+        "noise_config": resolved_noise_config.to_dict(),
+        "noise_metadata": resolved_noise_config.to_metadata(),
+        "dataset_metadata": result.get("dataset_metadata"),
+        "experiment_config": result.get("experiment_config"),
+        "training_config": result.get("training_config"),
+        "runtime_profile": result.get("runtime_profile"),
+        "runtime_breakdown": runtime_breakdown,
+        "run_summary": run_row,
+    }
     run_row_path.write_text(json.dumps(_serialize_for_json(run_row), indent=2, sort_keys=True) + "\n")
+    (run_output_dir / "runtime_profile.json").write_text(
+        json.dumps(_serialize_for_json(result.get("runtime_profile", {})), indent=2, sort_keys=True) + "\n"
+    )
+    (run_output_dir / "runtime_breakdown.json").write_text(
+        json.dumps(_serialize_for_json(runtime_breakdown), indent=2, sort_keys=True) + "\n"
+    )
+    (run_output_dir / "noisy_run_metadata.json").write_text(
+        json.dumps(_serialize_for_json(run_metadata), indent=2, sort_keys=True) + "\n"
+    )
     return run_row
 
 
@@ -471,6 +527,14 @@ def _write_summary_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "variance_test_loss",
         "mean_classification_threshold",
         "variance_classification_threshold",
+        "mean_build_time_seconds",
+        "variance_build_time_seconds",
+        "mean_forward_time_seconds",
+        "variance_forward_time_seconds",
+        "mean_gradient_time_seconds",
+        "variance_gradient_time_seconds",
+        "mean_total_training_time_seconds",
+        "variance_total_training_time_seconds",
         "mean_runtime_seconds",
         "variance_runtime_seconds",
     ]
