@@ -1,0 +1,5 @@
+backend_name,model_family,num_qubits,train_size,epochs,noise_model_name,noise_strength,num_runs,mean_train_accuracy,variance_train_accuracy,mean_test_accuracy,variance_test_accuracy,mean_train_loss,variance_train_loss,mean_test_loss,variance_test_loss,mean_classification_threshold,variance_classification_threshold,mean_runtime_seconds,variance_runtime_seconds
+qiskit_mixed,hea_qcnn,4,4,5,depolarizing,0.0,1,1.0,0.0,1.0,0.0,0.2867453509178298,0.0,0.2867590929304273,0.0,0.7151087517080783,0.0,4.685863698832691,0.0
+qiskit_mixed,hea_qcnn,4,4,5,depolarizing,0.005,1,1.0,0.0,1.0,0.0,0.28730851079245845,0.0,0.2873254635851408,0.0,0.7159663642052183,0.0,8.093170608393848,0.0
+qiskit_mixed,su2_qcnn,4,4,5,depolarizing,0.0,1,1.0,0.0,1.0,0.0,0.16179242654071374,0.0,0.16447664405811804,0.0,0.38171713438145527,0.0,0.6951956152915955,0.0
+qiskit_mixed,su2_qcnn,4,4,5,depolarizing,0.005,1,1.0,0.0,1.0,0.0,0.16222606109633114,0.0,0.16473653266857397,0.0,0.39567319409064644,0.0,1.9270938951522112,0.0
