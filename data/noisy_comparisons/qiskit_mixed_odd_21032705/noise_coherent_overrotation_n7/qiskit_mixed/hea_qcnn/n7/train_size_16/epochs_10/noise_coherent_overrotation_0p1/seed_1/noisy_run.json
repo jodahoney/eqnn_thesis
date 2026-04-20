@@ -1,0 +1,23 @@
+{
+  "backend_name": "qiskit_mixed",
+  "build_time_seconds": 0.00027290452271699905,
+  "classification_threshold": 0.4098517795722091,
+  "epochs": 10,
+  "experiment_name": "noisy_comparison_hea_qcnn_qiskit_mixed_n7_train16_epochs10_coherent_overrotation_0p1_seed1",
+  "forward_time_seconds": 31.99050980526954,
+  "gradient_time_seconds": 753.4758469965309,
+  "job_index": 142,
+  "model_family": "hea_qcnn",
+  "noise_model_name": "coherent_overrotation",
+  "noise_strength": 0.1,
+  "num_qubits": 7,
+  "output_dir": "/scratch/users/jdehoney/eqnn_thesis/data/noisy_comparisons/qiskit_mixed_odd_21032705/noise_coherent_overrotation_n7/qiskit_mixed/hea_qcnn/n7/train_size_16/epochs_10/noise_coherent_overrotation_0p1/seed_1",
+  "runtime_seconds": 786.6280606063083,
+  "seed": 1,
+  "test_accuracy": 0.97,
+  "test_loss": 0.08799894384823131,
+  "total_training_time_seconds": 765.3891371078789,
+  "train_accuracy": 1.0,
+  "train_loss": 0.07817923461976584,
+  "train_size": 16
+}

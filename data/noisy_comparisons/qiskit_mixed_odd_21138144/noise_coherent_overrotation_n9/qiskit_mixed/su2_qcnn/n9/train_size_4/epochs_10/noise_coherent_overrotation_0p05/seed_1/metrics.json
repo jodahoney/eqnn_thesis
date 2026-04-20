@@ -1,0 +1,443 @@
+{
+  "classification_threshold": 0.5038870437450236,
+  "dataset_metadata": {
+    "boundary": "open",
+    "critical_ratio": 1.0,
+    "dataset_name": "bond_alternating_heisenberg_paper_reproduction_v1",
+    "dense_test_points_requested": 101,
+    "dense_test_points_used": 100,
+    "eigensolver_requested": "auto",
+    "eigensolver_resolved": "sparse",
+    "label_convention": "paper_reproduction_v1_swap_aligned",
+    "left_ratio_min": 0.0,
+    "notes": [
+      "This dataset is locked to the paper_reproduction_v1 protocol.",
+      "The training grid is symmetric around the critical ratio so every train set spans both phases.",
+      "The dense test grid omits the exact critical point to keep labels unambiguous.",
+      "Paper reproduction labels are aligned with the SWAP readout direction: larger outputs map to the trivial phase."
+    ],
+    "num_qubits": 9,
+    "phase_labels": {
+      "0": "topological phase (coupling_ratio > critical_ratio)",
+      "1": "trivial phase (coupling_ratio < critical_ratio)"
+    },
+    "protocol": "paper_reproduction_v1",
+    "right_ratio_max": 2.0,
+    "test_ratios": [
+      0.0,
+      0.02,
+      0.04,
+      0.06,
+      0.08,
+      0.1,
+      0.12,
+      0.14,
+      0.16,
+      0.18,
+      0.2,
+      0.22,
+      0.24,
+      0.26,
+      0.28,
+      0.3,
+      0.32,
+      0.34,
+      0.36,
+      0.38,
+      0.4,
+      0.42,
+      0.44,
+      0.46,
+      0.48,
+      0.5,
+      0.52,
+      0.54,
+      0.56,
+      0.58,
+      0.6,
+      0.62,
+      0.64,
+      0.66,
+      0.68,
+      0.7000000000000001,
+      0.72,
+      0.74,
+      0.76,
+      0.78,
+      0.8,
+      0.8200000000000001,
+      0.84,
+      0.86,
+      0.88,
+      0.9,
+      0.92,
+      0.9400000000000001,
+      0.96,
+      0.98,
+      1.02,
+      1.04,
+      1.06,
+      1.08,
+      1.1,
+      1.12,
+      1.1400000000000001,
+      1.16,
+      1.18,
+      1.2,
+      1.22,
+      1.24,
+      1.26,
+      1.28,
+      1.3,
+      1.32,
+      1.34,
+      1.36,
+      1.3800000000000001,
+      1.4000000000000001,
+      1.42,
+      1.44,
+      1.46,
+      1.48,
+      1.5,
+      1.52,
+      1.54,
+      1.56,
+      1.58,
+      1.6,
+      1.62,
+      1.6400000000000001,
+      1.6600000000000001,
+      1.68,
+      1.7,
+      1.72,
+      1.74,
+      1.76,
+      1.78,
+      1.8,
+      1.82,
+      1.84,
+      1.86,
+      1.8800000000000001,
+      1.9000000000000001,
+      1.92,
+      1.94,
+      1.96,
+      1.98,
+      2.0
+    ],
+    "train_ratios": [
+      0.3333333333333333,
+      0.6666666666666666,
+      1.3333333333333333,
+      1.6666666666666665
+    ],
+    "train_size": 4
+  },
+  "experiment_config": {
+    "backend_name": "qiskit_mixed",
+    "boundary": "open",
+    "min_readout_qubits": null,
+    "model_family": "su2_qcnn",
+    "num_qubits": 9,
+    "parity_sequence": [
+      "even",
+      "odd"
+    ],
+    "pooling_keep": "left",
+    "pooling_mode": "partial_trace",
+    "readout_mode": "swap",
+    "shared_convolution_parameter": true
+  },
+  "experiment_name": "noisy_comparison_su2_qcnn_qiskit_mixed_n9_train4_epochs10_coherent_overrotation_0p05_seed1",
+  "history": {
+    "accuracy": [
+      0.5,
+      0.25,
+      0.25,
+      0.25,
+      0.75,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "best_accuracy": 1.0,
+    "best_loss": 0.20040912482300086,
+    "best_parameters": [
+      -0.6153015107106704,
+      0.5218462648497681,
+      0.7170155986723573,
+      -0.5860732105382839,
+      0.8985113614155205,
+      -0.6371020136320078,
+      -0.026847025608655657
+    ],
+    "best_restart": 0,
+    "best_threshold": 0.5038870437450236,
+    "final_parameters": [
+      -0.6153015107106704,
+      0.5218462648497681,
+      0.7170155986723573,
+      -0.5860732105382839,
+      0.8985113614155205,
+      -0.6371020136320078,
+      -0.026847025608655657
+    ],
+    "final_threshold": 0.5038870437450236,
+    "initial_parameters": [
+      0.017279209603239302,
+      0.04108090717505792,
+      0.016521853809169356,
+      -0.06515786158021805,
+      0.04526779333365589,
+      0.022318728618200567,
+      -0.026847661768014258
+    ],
+    "loss": [
+      0.3283005257578566,
+      0.32508803091048843,
+      0.3209328097572136,
+      0.3166322830862832,
+      0.3124942376573284,
+      0.301723937126562,
+      0.2767986481269516,
+      0.2443774310938207,
+      0.2275279053129074,
+      0.2173030895692813,
+      0.20040912482300086
+    ],
+    "restart_histories": [
+      {
+        "accuracy": [
+          0.5,
+          0.25,
+          0.25,
+          0.25,
+          0.75,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "best_accuracy": 1.0,
+        "best_loss": 0.20040912482300086,
+        "best_parameters": [
+          -0.6153015107106704,
+          0.5218462648497681,
+          0.7170155986723573,
+          -0.5860732105382839,
+          0.8985113614155205,
+          -0.6371020136320078,
+          -0.026847025608655657
+        ],
+        "best_threshold": 0.5038870437450236,
+        "final_parameters": [
+          -0.6153015107106704,
+          0.5218462648497681,
+          0.7170155986723573,
+          -0.5860732105382839,
+          0.8985113614155205,
+          -0.6371020136320078,
+          -0.026847025608655657
+        ],
+        "final_threshold": 0.5038870437450236,
+        "initial_parameters": [
+          0.017279209603239302,
+          0.04108090717505792,
+          0.016521853809169356,
+          -0.06515786158021805,
+          0.04526779333365589,
+          0.022318728618200567,
+          -0.026847661768014258
+        ],
+        "loss": [
+          0.3283005257578566,
+          0.32508803091048843,
+          0.3209328097572136,
+          0.3166322830862832,
+          0.3124942376573284,
+          0.301723937126562,
+          0.2767986481269516,
+          0.2443774310938207,
+          0.2275279053129074,
+          0.2173030895692813,
+          0.20040912482300086
+        ],
+        "threshold": [
+          0.5,
+          0.7740578119090331,
+          0.768196109287288,
+          0.7605396924045214,
+          0.753283406887225,
+          0.7412409697286254,
+          0.7147156167892708,
+          0.6643671354377227,
+          0.5992965148700632,
+          0.5432527677384975,
+          0.5038870437450236
+        ]
+      }
+    ],
+    "threshold": [
+      0.5,
+      0.7740578119090331,
+      0.768196109287288,
+      0.7605396924045214,
+      0.753283406887225,
+      0.7412409697286254,
+      0.7147156167892708,
+      0.6643671354377227,
+      0.5992965148700632,
+      0.5432527677384975,
+      0.5038870437450236
+    ]
+  },
+  "output_dir": "/scratch/users/jdehoney/eqnn_thesis/data/noisy_comparisons/qiskit_mixed_odd_21138144/noise_coherent_overrotation_n9/qiskit_mixed/su2_qcnn/n9/train_size_4/epochs_10/noise_coherent_overrotation_0p05/seed_1",
+  "parameter_count": 7,
+  "runtime_breakdown": {
+    "build_time_seconds": 0.0003057187423110008,
+    "forward_time_seconds": 526.265948257409,
+    "gradient_time_seconds": 785.5558755891398,
+    "total_run_time_seconds": 0.0,
+    "total_training_time_seconds": 877.8393852505833
+  },
+  "runtime_profile": {
+    "backend.qiskit.apply_convolution": {
+      "count": 3744,
+      "mean_seconds": 0.15817403802638236,
+      "total_seconds": 592.2035983707756
+    },
+    "backend.qiskit.apply_noise": {
+      "count": 3744,
+      "mean_seconds": 0.14884421385204794,
+      "total_seconds": 557.2727366620675
+    },
+    "backend.qiskit.apply_pooling": {
+      "count": 2808,
+      "mean_seconds": 0.0004585491947065561,
+      "total_seconds": 1.2876061387360096
+    },
+    "backend.qiskit.build_circuit": {
+      "count": 3744,
+      "mean_seconds": 0.050117670861122586,
+      "total_seconds": 187.64055970404297
+    },
+    "backend.qiskit.forward_density": {
+      "count": 936,
+      "mean_seconds": 1.431037013947319,
+      "total_seconds": 1339.4506450546905
+    },
+    "experiment.build_model": {
+      "count": 1,
+      "mean_seconds": 0.0003001289442181587,
+      "total_seconds": 0.0003001289442181587
+    },
+    "experiment.build_trainer": {
+      "count": 1,
+      "mean_seconds": 5.589798092842102e-06,
+      "total_seconds": 5.589798092842102e-06
+    },
+    "experiment.final_test_evaluate": {
+      "count": 1,
+      "mean_seconds": 141.19608702417463,
+      "total_seconds": 141.19608702417463
+    },
+    "experiment.final_train_evaluate": {
+      "count": 1,
+      "mean_seconds": 5.69226595479995,
+      "total_seconds": 5.69226595479995
+    },
+    "experiment.prepare_output_dir": {
+      "count": 1,
+      "mean_seconds": 0.0038239089772105217,
+      "total_seconds": 0.0038239089772105217
+    },
+    "experiment.test_predict": {
+      "count": 1,
+      "mean_seconds": 303.98508079443127,
+      "total_seconds": 303.98508079443127
+    },
+    "experiment.train_fit": {
+      "count": 1,
+      "mean_seconds": 877.8393852505833,
+      "total_seconds": 877.8393852505833
+    },
+    "experiment.train_predict": {
+      "count": 1,
+      "mean_seconds": 10.961920576170087,
+      "total_seconds": 10.961920576170087
+    },
+    "experiment.write_artifacts": {
+      "count": 1,
+      "mean_seconds": 0.01381072960793972,
+      "total_seconds": 0.01381072960793972
+    },
+    "train.backward_gradient": {
+      "count": 20,
+      "mean_seconds": 39.277793779456985,
+      "total_seconds": 785.5558755891398
+    },
+    "train.epoch_evaluate": {
+      "count": 10,
+      "mean_seconds": 5.611810250114649,
+      "total_seconds": 56.118102501146495
+    },
+    "train.forward_loss": {
+      "count": 13,
+      "mean_seconds": 7.538698040522062e-07,
+      "total_seconds": 9.80030745267868e-06
+    },
+    "train.forward_predict": {
+      "count": 13,
+      "mean_seconds": 16.25530285280771,
+      "total_seconds": 211.31893708650023
+    },
+    "train.initial_evaluate": {
+      "count": 1,
+      "mean_seconds": 8.312920917756855,
+      "total_seconds": 8.312920917756855
+    },
+    "train.optimizer_step": {
+      "count": 20,
+      "mean_seconds": 4.8927823081612586e-05,
+      "total_seconds": 0.0009785564616322517
+    },
+    "train.threshold_update": {
+      "count": 10,
+      "mean_seconds": 2.7849704787135123,
+      "total_seconds": 27.849704787135124
+    }
+  },
+  "test_metrics": {
+    "accuracy": 0.92,
+    "loss": 0.20238768112462666
+  },
+  "train_metrics": {
+    "accuracy": 1.0,
+    "loss": 0.20040912482300086
+  },
+  "training_config": {
+    "batch_size": 2,
+    "beta1": 0.9,
+    "beta2": 0.999,
+    "classification_threshold": 0.5,
+    "epochs": 10,
+    "epsilon": 1e-08,
+    "finite_difference_eps": 0.001,
+    "gradient_backend": "finite_difference",
+    "initialization_noise_scale": 0.05,
+    "initialization_strategy": "noisy_current",
+    "learning_rate": 0.05,
+    "loss": "mse",
+    "num_restarts": 1,
+    "optimizer": "adam",
+    "random_seed": 1,
+    "restore_best": true,
+    "threshold_critical_ratio": 1.0,
+    "threshold_update": "paper_nearest_critical"
+  }
+}

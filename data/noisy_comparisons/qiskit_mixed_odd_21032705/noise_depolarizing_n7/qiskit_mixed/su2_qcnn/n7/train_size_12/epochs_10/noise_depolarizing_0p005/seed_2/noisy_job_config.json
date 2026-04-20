@@ -1,0 +1,91 @@
+{
+  "config": {
+    "backend_name": "qiskit_mixed",
+    "batch_size": 2,
+    "boundary": "open",
+    "critical_ratio": 1.0,
+    "dense_test_points": 101,
+    "eigensolver": "auto",
+    "epochs_values": [
+      10
+    ],
+    "gradient_backend": "finite_difference",
+    "initialization_noise_scale": 0.05,
+    "initialization_strategy": "noisy_current",
+    "learning_rate": 0.05,
+    "left_ratio_min": 0.0,
+    "loss": "mse",
+    "model_families": [
+      "su2_qcnn",
+      "hea_qcnn"
+    ],
+    "noise_model_name": "depolarizing",
+    "noise_strength_values": [
+      0.0,
+      0.001,
+      0.005,
+      0.01,
+      0.05,
+      0.1
+    ],
+    "num_qubits_values": [
+      7
+    ],
+    "odd_qubits_only": true,
+    "optimizer": "adam",
+    "pooling_keep": "left",
+    "pooling_mode": "partial_trace",
+    "random_seeds": [
+      0,
+      1,
+      2
+    ],
+    "readout_mode": "swap",
+    "right_ratio_max": 2.0,
+    "shared_convolution_parameter": true,
+    "threshold_critical_ratio": 1.0,
+    "threshold_update": "paper_nearest_critical",
+    "train_sizes": [
+      4,
+      8,
+      12,
+      16
+    ]
+  },
+  "job": {
+    "epochs": 10,
+    "index": 44,
+    "model_family": "su2_qcnn",
+    "noise_strength": 0.005,
+    "num_qubits": 7,
+    "seed": 2,
+    "train_size": 12
+  },
+  "noise_config": {
+    "amplitude_damping_gamma": 0.0,
+    "coherent_overrotation_angle": 0.0,
+    "coherent_overrotation_axis": "zz",
+    "noise_model_name": "depolarizing",
+    "phase_damping_gamma": 0.0,
+    "readout_error_probability": 0.0,
+    "single_qubit_depolarizing_error": 0.005,
+    "two_qubit_depolarizing_error": 0.005
+  },
+  "noise_metadata": {
+    "is_noiseless": false,
+    "noise_model_name": "depolarizing",
+    "parameters": {
+      "amplitude_damping_gamma": 0.0,
+      "coherent_overrotation_angle": 0.0,
+      "coherent_overrotation_axis": "zz",
+      "phase_damping_gamma": 0.0,
+      "readout_error_probability": 0.0,
+      "single_qubit_depolarizing_error": 0.005,
+      "two_qubit_depolarizing_error": 0.005
+    },
+    "primary_strength": 0.005
+  },
+  "resolved_num_qubits_values": [
+    7
+  ]
+}

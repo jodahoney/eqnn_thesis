@@ -1,0 +1,107 @@
+{
+  "backend.qiskit.apply_convolution": {
+    "count": 6846,
+    "mean_seconds": 0.00024792069777097576,
+    "total_seconds": 1.6972650969401002
+  },
+  "backend.qiskit.apply_noise": {
+    "count": 6846,
+    "mean_seconds": 0.0017204076731090496,
+    "total_seconds": 11.777910930104554
+  },
+  "backend.qiskit.apply_pooling": {
+    "count": 4564,
+    "mean_seconds": 2.3951437479369898e-05,
+    "total_seconds": 0.10931436065584421
+  },
+  "backend.qiskit.build_circuit": {
+    "count": 6846,
+    "mean_seconds": 0.0018715346822465611,
+    "total_seconds": 12.812526434659958
+  },
+  "backend.qiskit.forward_density": {
+    "count": 2282,
+    "mean_seconds": 0.01164555098285195,
+    "total_seconds": 26.57514734286815
+  },
+  "experiment.build_model": {
+    "count": 1,
+    "mean_seconds": 0.00011415313929319382,
+    "total_seconds": 0.00011415313929319382
+  },
+  "experiment.build_trainer": {
+    "count": 1,
+    "mean_seconds": 1.6121193766593933e-06,
+    "total_seconds": 1.6121193766593933e-06
+  },
+  "experiment.final_test_evaluate": {
+    "count": 1,
+    "mean_seconds": 1.1778670977801085,
+    "total_seconds": 1.1778670977801085
+  },
+  "experiment.final_train_evaluate": {
+    "count": 1,
+    "mean_seconds": 0.09405534900724888,
+    "total_seconds": 0.09405534900724888
+  },
+  "experiment.prepare_output_dir": {
+    "count": 1,
+    "mean_seconds": 0.0003858450800180435,
+    "total_seconds": 0.0003858450800180435
+  },
+  "experiment.test_predict": {
+    "count": 1,
+    "mean_seconds": 2.356278841383755,
+    "total_seconds": 2.356278841383755
+  },
+  "experiment.train_fit": {
+    "count": 1,
+    "mean_seconds": 23.051177171058953,
+    "total_seconds": 23.051177171058953
+  },
+  "experiment.train_predict": {
+    "count": 1,
+    "mean_seconds": 0.18915546033531427,
+    "total_seconds": 0.18915546033531427
+  },
+  "experiment.write_artifacts": {
+    "count": 1,
+    "mean_seconds": 0.006098682060837746,
+    "total_seconds": 0.006098682060837746
+  },
+  "train.backward_gradient": {
+    "count": 12,
+    "mean_seconds": 1.8835887155340363,
+    "total_seconds": 22.603064586408436
+  },
+  "train.epoch_evaluate": {
+    "count": 3,
+    "mean_seconds": 0.09395770045618217,
+    "total_seconds": 0.2818731013685465
+  },
+  "train.forward_loss": {
+    "count": 6,
+    "mean_seconds": 6.261592109998068e-07,
+    "total_seconds": 3.7569552659988403e-06
+  },
+  "train.forward_predict": {
+    "count": 6,
+    "mean_seconds": 0.2746644757377605,
+    "total_seconds": 1.6479868544265628
+  },
+  "train.initial_evaluate": {
+    "count": 1,
+    "mean_seconds": 0.09428298380225897,
+    "total_seconds": 0.09428298380225897
+  },
+  "train.optimizer_step": {
+    "count": 12,
+    "mean_seconds": 2.9748228068153065e-05,
+    "total_seconds": 0.00035697873681783676
+  },
+  "train.threshold_update": {
+    "count": 3,
+    "mean_seconds": 0.02369563312580188,
+    "total_seconds": 0.07108689937740564
+  }
+}

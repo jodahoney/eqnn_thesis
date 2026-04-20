@@ -1,0 +1,394 @@
+{
+  "config": {
+    "backend_name": "qiskit_mixed",
+    "batch_size": 2,
+    "boundary": "open",
+    "critical_ratio": 1.0,
+    "dense_test_points": 101,
+    "eigensolver": "auto",
+    "epochs_values": [
+      3
+    ],
+    "gradient_backend": "finite_difference",
+    "initialization_noise_scale": 0.05,
+    "initialization_strategy": "noisy_current",
+    "learning_rate": 0.05,
+    "left_ratio_min": 0.0,
+    "loss": "mse",
+    "model_families": [
+      "su2_qcnn",
+      "hea_qcnn"
+    ],
+    "noise_model_name": "depolarizing",
+    "noise_strength_values": [
+      0.0,
+      0.01,
+      0.1
+    ],
+    "num_qubits_values": [
+      5
+    ],
+    "odd_qubits_only": true,
+    "optimizer": "adam",
+    "pooling_keep": "left",
+    "pooling_mode": "partial_trace",
+    "random_seeds": [
+      0
+    ],
+    "readout_mode": "swap",
+    "right_ratio_max": 2.0,
+    "shared_convolution_parameter": true,
+    "threshold_critical_ratio": 1.0,
+    "threshold_update": "paper_nearest_critical",
+    "train_sizes": [
+      4,
+      8,
+      12
+    ]
+  },
+  "dataset_metadata": {
+    "boundary": "open",
+    "critical_ratio": 1.0,
+    "dataset_name": "bond_alternating_heisenberg_paper_reproduction_v1",
+    "dense_test_points_requested": 101,
+    "dense_test_points_used": 100,
+    "eigensolver_requested": "auto",
+    "eigensolver_resolved": "dense",
+    "label_convention": "paper_reproduction_v1_swap_aligned",
+    "left_ratio_min": 0.0,
+    "notes": [
+      "This dataset is locked to the paper_reproduction_v1 protocol.",
+      "The training grid is symmetric around the critical ratio so every train set spans both phases.",
+      "The dense test grid omits the exact critical point to keep labels unambiguous.",
+      "Paper reproduction labels are aligned with the SWAP readout direction: larger outputs map to the trivial phase."
+    ],
+    "num_qubits": 5,
+    "phase_labels": {
+      "0": "topological phase (coupling_ratio > critical_ratio)",
+      "1": "trivial phase (coupling_ratio < critical_ratio)"
+    },
+    "protocol": "paper_reproduction_v1",
+    "right_ratio_max": 2.0,
+    "test_ratios": [
+      0.0,
+      0.02,
+      0.04,
+      0.06,
+      0.08,
+      0.1,
+      0.12,
+      0.14,
+      0.16,
+      0.18,
+      0.2,
+      0.22,
+      0.24,
+      0.26,
+      0.28,
+      0.3,
+      0.32,
+      0.34,
+      0.36,
+      0.38,
+      0.4,
+      0.42,
+      0.44,
+      0.46,
+      0.48,
+      0.5,
+      0.52,
+      0.54,
+      0.56,
+      0.58,
+      0.6,
+      0.62,
+      0.64,
+      0.66,
+      0.68,
+      0.7000000000000001,
+      0.72,
+      0.74,
+      0.76,
+      0.78,
+      0.8,
+      0.8200000000000001,
+      0.84,
+      0.86,
+      0.88,
+      0.9,
+      0.92,
+      0.9400000000000001,
+      0.96,
+      0.98,
+      1.02,
+      1.04,
+      1.06,
+      1.08,
+      1.1,
+      1.12,
+      1.1400000000000001,
+      1.16,
+      1.18,
+      1.2,
+      1.22,
+      1.24,
+      1.26,
+      1.28,
+      1.3,
+      1.32,
+      1.34,
+      1.36,
+      1.3800000000000001,
+      1.4000000000000001,
+      1.42,
+      1.44,
+      1.46,
+      1.48,
+      1.5,
+      1.52,
+      1.54,
+      1.56,
+      1.58,
+      1.6,
+      1.62,
+      1.6400000000000001,
+      1.6600000000000001,
+      1.68,
+      1.7,
+      1.72,
+      1.74,
+      1.76,
+      1.78,
+      1.8,
+      1.82,
+      1.84,
+      1.86,
+      1.8800000000000001,
+      1.9000000000000001,
+      1.92,
+      1.94,
+      1.96,
+      1.98,
+      2.0
+    ],
+    "train_ratios": [
+      0.2,
+      0.4,
+      0.6000000000000001,
+      0.8,
+      1.2,
+      1.4,
+      1.6,
+      1.8
+    ],
+    "train_size": 8
+  },
+  "experiment_config": {
+    "backend_name": "qiskit_mixed",
+    "boundary": "open",
+    "min_readout_qubits": null,
+    "model_family": "su2_qcnn",
+    "num_qubits": 5,
+    "parity_sequence": [
+      "even",
+      "odd"
+    ],
+    "pooling_keep": "left",
+    "pooling_mode": "partial_trace",
+    "readout_mode": "swap",
+    "shared_convolution_parameter": true
+  },
+  "job": {
+    "epochs": 3,
+    "index": 4,
+    "model_family": "su2_qcnn",
+    "noise_strength": 0.01,
+    "num_qubits": 5,
+    "seed": 0,
+    "train_size": 8
+  },
+  "noise_config": {
+    "amplitude_damping_gamma": 0.0,
+    "coherent_overrotation_angle": 0.0,
+    "coherent_overrotation_axis": "zz",
+    "noise_model_name": "depolarizing",
+    "phase_damping_gamma": 0.0,
+    "readout_error_probability": 0.0,
+    "single_qubit_depolarizing_error": 0.01,
+    "two_qubit_depolarizing_error": 0.01
+  },
+  "noise_metadata": {
+    "is_noiseless": false,
+    "noise_model_name": "depolarizing",
+    "parameters": {
+      "amplitude_damping_gamma": 0.0,
+      "coherent_overrotation_angle": 0.0,
+      "coherent_overrotation_axis": "zz",
+      "phase_damping_gamma": 0.0,
+      "readout_error_probability": 0.0,
+      "single_qubit_depolarizing_error": 0.01,
+      "two_qubit_depolarizing_error": 0.01
+    },
+    "primary_strength": 0.01
+  },
+  "resolved_num_qubits_values": [
+    5
+  ],
+  "run_summary": {
+    "backend_name": "qiskit_mixed",
+    "build_time_seconds": 8.363649249076843e-05,
+    "classification_threshold": 0.6982458281753137,
+    "epochs": 3,
+    "experiment_name": "noisy_comparison_su2_qcnn_qiskit_mixed_n5_train8_epochs3_depolarizing_0p01_seed0",
+    "forward_time_seconds": 2.6017315704375505,
+    "gradient_time_seconds": 1.7521363031119108,
+    "job_index": 4,
+    "model_family": "su2_qcnn",
+    "noise_model_name": "depolarizing",
+    "noise_strength": 0.01,
+    "num_qubits": 5,
+    "output_dir": "/scratch/users/jdehoney/eqnn_thesis/data/noisy/smoke_depolarizing/qiskit_mixed/su2_qcnn/n5/train_size_8/epochs_3/noise_depolarizing_0p01/seed_0",
+    "runtime_seconds": 4.408068246208131,
+    "seed": 0,
+    "test_accuracy": 0.99,
+    "test_loss": 0.2627261728255477,
+    "total_training_time_seconds": 2.0303552327677608,
+    "train_accuracy": 1.0,
+    "train_loss": 0.2616134355616698,
+    "train_size": 8
+  },
+  "runtime_breakdown": {
+    "build_time_seconds": 8.363649249076843e-05,
+    "forward_time_seconds": 2.6017315704375505,
+    "gradient_time_seconds": 1.7521363031119108,
+    "total_run_time_seconds": 0.0,
+    "total_training_time_seconds": 2.0303552327677608
+  },
+  "runtime_profile": {
+    "backend.qiskit.apply_convolution": {
+      "count": 1806,
+      "mean_seconds": 0.00024071142772585978,
+      "total_seconds": 0.4347248384729028
+    },
+    "backend.qiskit.apply_noise": {
+      "count": 1806,
+      "mean_seconds": 0.0017183159600741179,
+      "total_seconds": 3.103278623893857
+    },
+    "backend.qiskit.apply_pooling": {
+      "count": 1204,
+      "mean_seconds": 2.3599867971979107e-05,
+      "total_seconds": 0.028414241038262844
+    },
+    "backend.qiskit.build_circuit": {
+      "count": 1806,
+      "mean_seconds": 0.0003946830569080604,
+      "total_seconds": 0.7127976007759571
+    },
+    "backend.qiskit.forward_density": {
+      "count": 602,
+      "mean_seconds": 0.007184773265845158,
+      "total_seconds": 4.325233506038785
+    },
+    "experiment.build_model": {
+      "count": 1,
+      "mean_seconds": 8.195359259843826e-05,
+      "total_seconds": 8.195359259843826e-05
+    },
+    "experiment.build_trainer": {
+      "count": 1,
+      "mean_seconds": 1.6828998923301697e-06,
+      "total_seconds": 1.6828998923301697e-06
+    },
+    "experiment.final_test_evaluate": {
+      "count": 1,
+      "mean_seconds": 0.7295607281848788,
+      "total_seconds": 0.7295607281848788
+    },
+    "experiment.final_train_evaluate": {
+      "count": 1,
+      "mean_seconds": 0.05858821701258421,
+      "total_seconds": 0.05858821701258421
+    },
+    "experiment.prepare_output_dir": {
+      "count": 1,
+      "mean_seconds": 0.00036939047276973724,
+      "total_seconds": 0.00036939047276973724
+    },
+    "experiment.test_predict": {
+      "count": 1,
+      "mean_seconds": 1.46330451592803,
+      "total_seconds": 1.46330451592803
+    },
+    "experiment.train_fit": {
+      "count": 1,
+      "mean_seconds": 2.0303552327677608,
+      "total_seconds": 2.0303552327677608
+    },
+    "experiment.train_predict": {
+      "count": 1,
+      "mean_seconds": 0.11690240912139416,
+      "total_seconds": 0.11690240912139416
+    },
+    "experiment.write_artifacts": {
+      "count": 1,
+      "mean_seconds": 0.004902751184999943,
+      "total_seconds": 0.004902751184999943
+    },
+    "train.backward_gradient": {
+      "count": 12,
+      "mean_seconds": 0.14601135859265924,
+      "total_seconds": 1.7521363031119108
+    },
+    "train.epoch_evaluate": {
+      "count": 3,
+      "mean_seconds": 0.058349021089573704,
+      "total_seconds": 0.1750470632687211
+    },
+    "train.forward_loss": {
+      "count": 6,
+      "mean_seconds": 5.76178232828776e-07,
+      "total_seconds": 3.4570693969726562e-06
+    },
+    "train.forward_predict": {
+      "count": 6,
+      "mean_seconds": 0.1702535313864549,
+      "total_seconds": 1.0215211883187294
+    },
+    "train.initial_evaluate": {
+      "count": 1,
+      "mean_seconds": 0.05840647127479315,
+      "total_seconds": 0.05840647127479315
+    },
+    "train.optimizer_step": {
+      "count": 12,
+      "mean_seconds": 2.4240852023164432e-05,
+      "total_seconds": 0.0002908902242779732
+    },
+    "train.threshold_update": {
+      "count": 3,
+      "mean_seconds": 0.014678028722604116,
+      "total_seconds": 0.04403408616781235
+    }
+  },
+  "training_config": {
+    "batch_size": 2,
+    "beta1": 0.9,
+    "beta2": 0.999,
+    "classification_threshold": 0.5,
+    "epochs": 3,
+    "epsilon": 1e-08,
+    "finite_difference_eps": 0.001,
+    "gradient_backend": "finite_difference",
+    "initialization_noise_scale": 0.05,
+    "initialization_strategy": "noisy_current",
+    "learning_rate": 0.05,
+    "loss": "mse",
+    "num_restarts": 1,
+    "optimizer": "adam",
+    "random_seed": 0,
+    "restore_best": true,
+    "threshold_critical_ratio": 1.0,
+    "threshold_update": "paper_nearest_critical"
+  }
+}

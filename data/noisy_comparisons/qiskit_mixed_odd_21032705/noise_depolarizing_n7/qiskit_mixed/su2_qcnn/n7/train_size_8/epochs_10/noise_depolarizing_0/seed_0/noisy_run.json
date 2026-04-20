@@ -1,0 +1,23 @@
+{
+  "backend_name": "qiskit_mixed",
+  "build_time_seconds": 0.0003520539030432701,
+  "classification_threshold": 0.5340766446059007,
+  "epochs": 10,
+  "experiment_name": "noisy_comparison_su2_qcnn_qiskit_mixed_n7_train8_epochs10_depolarizing_0_seed0",
+  "forward_time_seconds": 5.872195774689317,
+  "gradient_time_seconds": 11.40603875927627,
+  "job_index": 18,
+  "model_family": "su2_qcnn",
+  "noise_model_name": "depolarizing",
+  "noise_strength": 0.0,
+  "num_qubits": 7,
+  "output_dir": "/scratch/users/jdehoney/eqnn_thesis/data/noisy_comparisons/qiskit_mixed_odd_21032705/noise_depolarizing_n7/qiskit_mixed/su2_qcnn/n7/train_size_8/epochs_10/noise_depolarizing_0/seed_0",
+  "runtime_seconds": 17.921970672905445,
+  "seed": 0,
+  "test_accuracy": 1.0,
+  "test_loss": 0.22068951820729207,
+  "total_training_time_seconds": 12.950012520886958,
+  "train_accuracy": 1.0,
+  "train_loss": 0.22046838978182035,
+  "train_size": 8
+}
