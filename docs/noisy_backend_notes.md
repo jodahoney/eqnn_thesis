@@ -31,4 +31,6 @@ In noisy comparison sweeps:
 - `noisy_qubit_index=None` means the run uses the configured default scope/behavior
 - an integer `noisy_qubit_index=k` means the run is forced into `selected_qubits` mode with `noisy_qubits=(k,)`
 
+For `selected_qubits`, selected indices target qubits while they are present in the current effective register. After pooling or coarse-graining, selected indices outside the current effective register are skipped for that layer instead of treated as errors.
+
 The optional symmetry diagnostic recorded by noisy comparison is an empirical prediction-drift diagnostic under sampled global SU(2) transformations. It is useful as a smoke-level robustness check, not a theoretical certificate.

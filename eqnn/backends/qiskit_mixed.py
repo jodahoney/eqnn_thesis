@@ -170,11 +170,10 @@ class QiskitMixedStateBackend(QiskitPureStateBackend):
         if self.noise_config.noise_application_scope == "all":
             return tuple(range(num_qubits))
         selected = tuple(int(site) for site in (self.noise_config.noisy_qubits or ()))
-        if any(site >= num_qubits for site in selected):
-            raise ValueError("noisy_qubits must be valid qubit indices for the current system size")
-        # In selected_qubits mode we treat the selected set as system-level noisy sites
-        # that receive the single-qubit channel after each layer.
-        return selected
+        # In selected_qubits mode indices refer to the current effective register.
+        # Pooling can shrink the register, so selected indices that are no longer
+        # present are skipped instead of treated as invalid for later layers.
+        return tuple(site for site in selected if site < num_qubits)
 
     def _single_qubit_strength_for_site(self, site: int, default_strength: float) -> float:
         # Per-qubit profiles override the scalar channel strength rather than scale it.

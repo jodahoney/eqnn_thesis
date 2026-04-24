@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+from eqnn.backends.qiskit_mixed import QiskitMixedStateBackend
 from eqnn.noise import SUPPORTED_NOISE_MODELS, NoiseConfig, noise_config_from_strength
 
 
@@ -64,6 +65,18 @@ class NoiseConfigTests(unittest.TestCase):
                 phase_damping_gamma=0.1,
                 noise_application_scope="selected_qubits",
             )
+
+    def test_selected_qubits_outside_effective_register_are_skipped(self) -> None:
+        backend = object.__new__(QiskitMixedStateBackend)
+        backend.noise_config = NoiseConfig(
+            noise_model_name="amplitude_damping",
+            amplitude_damping_gamma=0.1,
+            noise_application_scope="selected_qubits",
+            noisy_qubits=(4,),
+        )
+
+        self.assertEqual(backend._target_noise_sites(active_qubits=(0, 1), num_qubits=5), (4,))
+        self.assertEqual(backend._target_noise_sites(active_qubits=(0, 1), num_qubits=2), ())
 
     def test_noise_metadata_documents_profile_override_and_pair_indexing(self) -> None:
         config = NoiseConfig(
