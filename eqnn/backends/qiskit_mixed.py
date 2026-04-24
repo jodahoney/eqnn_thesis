@@ -46,6 +46,23 @@ class QiskitMixedStateBackend(QiskitPureStateBackend):
                 "Install it with `pip install 'eqnn-simulator[qiskit]'`."
             )
         self.noise_config = NoiseConfig() if noise_config is None else noise_config
+        self._overrotation_rng: np.random.Generator | None = None
+
+    def forward(
+        self,
+        model: object,
+        state: np.ndarray,
+        parameters: np.ndarray,
+    ) -> QCNNForwardPass:
+        if self.noise_config.noise_model_name == "coherent_overrotation":
+            base_seed = 0 if self.noise_config.coherent_overrotation_seed is None else int(
+                self.noise_config.coherent_overrotation_seed
+            )
+            self._overrotation_rng = np.random.default_rng(base_seed)
+        try:
+            return super().forward(model, state, parameters)
+        finally:
+            self._overrotation_rng = None
 
     def _apply_post_convolution_noise(
         self,
@@ -62,31 +79,44 @@ class QiskitMixedStateBackend(QiskitPureStateBackend):
             )
             active_qubits = active_qubits_for_convolution(convolution)
             active_pairs = active_pairs_for_convolution(convolution)
+            target_sites = self._target_noise_sites(active_qubits, num_qubits)
 
             if self.noise_config.noise_model_name == "depolarizing":
-                if self.noise_config.single_qubit_depolarizing_error > 0.0:
-                    channel = Kraus(
-                        self._single_qubit_depolarizing_kraus(self.noise_config.single_qubit_depolarizing_error)
+                for site in target_sites:
+                    strength = self._single_qubit_strength_for_site(
+                        site,
+                        self.noise_config.single_qubit_depolarizing_error,
                     )
-                    for site in active_qubits:
-                        qiskit_density = qiskit_density.evolve(
-                            channel,
-                            qargs=[repo_sites_to_qiskit(num_qubits, (site,))[0]],
-                        )
+                    if strength <= 0.0:
+                        continue
+                    channel = Kraus(self._single_qubit_depolarizing_kraus(strength))
+                    qiskit_density = qiskit_density.evolve(
+                        channel,
+                        qargs=[repo_sites_to_qiskit(num_qubits, (site,))[0]],
+                    )
                 if self.noise_config.two_qubit_depolarizing_error > 0.0:
                     channel = Kraus(
                         self._two_qubit_depolarizing_kraus(self.noise_config.two_qubit_depolarizing_error)
                     )
                     for pair in active_pairs:
                         qargs = list(repo_sites_to_qiskit(num_qubits, pair))
-                        qiskit_density = qiskit_density.evolve(channel, qargs=qargs)
+                        qiskit_density = qiskit_density.evolve(
+                            channel,
+                            qargs=qargs,
+                        )
 
             if (
                 self.noise_config.noise_model_name == "amplitude_damping"
-                and self.noise_config.amplitude_damping_gamma > 0.0
+                and (
+                    self.noise_config.amplitude_damping_gamma > 0.0
+                    or self.noise_config.single_qubit_error_profile is not None
+                )
             ):
-                channel = Kraus(self._amplitude_damping_kraus(self.noise_config.amplitude_damping_gamma))
-                for site in active_qubits:
+                for site in target_sites:
+                    strength = self._single_qubit_strength_for_site(site, self.noise_config.amplitude_damping_gamma)
+                    if strength <= 0.0:
+                        continue
+                    channel = Kraus(self._amplitude_damping_kraus(strength))
                     qiskit_density = qiskit_density.evolve(
                         channel,
                         qargs=[repo_sites_to_qiskit(num_qubits, (site,))[0]],
@@ -94,10 +124,16 @@ class QiskitMixedStateBackend(QiskitPureStateBackend):
 
             if (
                 self.noise_config.noise_model_name == "phase_damping"
-                and self.noise_config.phase_damping_gamma > 0.0
+                and (
+                    self.noise_config.phase_damping_gamma > 0.0
+                    or self.noise_config.single_qubit_error_profile is not None
+                )
             ):
-                channel = Kraus(self._phase_damping_kraus(self.noise_config.phase_damping_gamma))
-                for site in active_qubits:
+                for site in target_sites:
+                    strength = self._single_qubit_strength_for_site(site, self.noise_config.phase_damping_gamma)
+                    if strength <= 0.0:
+                        continue
+                    channel = Kraus(self._phase_damping_kraus(strength))
                     qiskit_density = qiskit_density.evolve(
                         channel,
                         qargs=[repo_sites_to_qiskit(num_qubits, (site,))[0]],
@@ -105,21 +141,104 @@ class QiskitMixedStateBackend(QiskitPureStateBackend):
 
             if (
                 self.noise_config.noise_model_name == "coherent_overrotation"
-                and self.noise_config.coherent_overrotation_angle != 0.0
+                and not self.noise_config._coherent_noise_is_noiseless()
             ):
-                channel = Kraus(
-                    [
-                        self._coherent_overrotation_unitary(
-                            self.noise_config.coherent_overrotation_angle,
-                            axis=self.noise_config.coherent_overrotation_axis,
-                        )
-                    ]
-                )
-                for pair in active_pairs:
+                for pair_index, pair in enumerate(active_pairs):
+                    angle = self._resolve_overrotation_angle(pair, pair_index)
+                    if angle == 0.0:
+                        continue
+                    channel = Kraus(
+                        [
+                            self._coherent_overrotation_unitary(
+                                angle,
+                                axis=self.noise_config.coherent_overrotation_axis,
+                            )
+                        ]
+                    )
                     qargs = list(repo_sites_to_qiskit(num_qubits, pair))
                     qiskit_density = qiskit_density.evolve(channel, qargs=qargs)
 
             return np.asarray(qiskit_density_to_repo(np.asarray(qiskit_density.data), num_qubits), dtype=np.complex128)
+
+    def _target_noise_sites(
+        self,
+        active_qubits: tuple[int, ...] | list[int],
+        num_qubits: int,
+    ) -> tuple[int, ...]:
+        if self.noise_config.noise_application_scope == "active":
+            return tuple(int(site) for site in active_qubits)
+        if self.noise_config.noise_application_scope == "all":
+            return tuple(range(num_qubits))
+        selected = tuple(int(site) for site in (self.noise_config.noisy_qubits or ()))
+        if any(site >= num_qubits for site in selected):
+            raise ValueError("noisy_qubits must be valid qubit indices for the current system size")
+        # In selected_qubits mode we treat the selected set as system-level noisy sites
+        # that receive the single-qubit channel after each layer.
+        return selected
+
+    def _single_qubit_strength_for_site(self, site: int, default_strength: float) -> float:
+        # Per-qubit profiles override the scalar channel strength rather than scale it.
+        profile = self.noise_config.single_qubit_error_profile
+        if profile is not None and site < len(profile):
+            return float(profile[site])
+        return float(default_strength)
+
+    def _resolve_overrotation_angle(
+        self,
+        pair: tuple[int, int],
+        pair_index: int,
+        layer_index: int | None = None,
+    ) -> float:
+        if self.noise_config.coherent_overrotation_axis != "zz":
+            raise ValueError("coherent_overrotation_axis must currently be 'zz'")
+
+        base_angle = float(self.noise_config.coherent_overrotation_angle)
+        mode = self.noise_config.coherent_overrotation_mode
+
+        if mode == "fixed":
+            return base_angle
+        if mode == "pair_dependent":
+            angles = self.noise_config.pair_dependent_overrotation_angles
+            # Pair-dependent angles are indexed by the active-pair order in the current
+            # convolution layer, not by a physical qubit-pair label map.
+            if angles is not None and pair_index < len(angles):
+                return float(angles[pair_index])
+            return base_angle
+        rng = self._overrotation_rng
+        if rng is None:
+            rng = np.random.default_rng(self._overrotation_seed(pair, pair_index, layer_index))
+
+        if mode == "stochastic":
+            if rng.random() < float(self.noise_config.coherent_overrotation_probability):
+                return base_angle
+            return 0.0
+        if mode == "random_angle":
+            return float(rng.normal(loc=base_angle, scale=float(self.noise_config.coherent_overrotation_angle_std)))
+
+        raise ValueError(
+            "coherent_overrotation_mode must be 'fixed', 'stochastic', 'random_angle', or 'pair_dependent'"
+        )
+
+    def _overrotation_seed(
+        self,
+        pair: tuple[int, int],
+        pair_index: int,
+        layer_index: int | None,
+    ) -> int:
+        base_seed = 0 if self.noise_config.coherent_overrotation_seed is None else int(
+            self.noise_config.coherent_overrotation_seed
+        )
+        layer_term = 0 if layer_index is None else int(layer_index) + 1
+        return int(
+            (
+                base_seed
+                + 104_729 * (pair[0] + 1)
+                + 130_363 * (pair[1] + 1)
+                + 161_803 * (pair_index + 1)
+                + 199_999 * layer_term
+            )
+            % (2**63 - 1)
+        )
 
     def _postprocess_forward_pass(self, forward_pass: object) -> object:
         if not isinstance(forward_pass, QCNNForwardPass):

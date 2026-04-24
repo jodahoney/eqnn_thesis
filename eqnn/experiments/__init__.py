@@ -38,6 +38,10 @@ from eqnn.experiments.runner import (
     run_benchmark_sweep,
     run_training_experiment,
 )
+from eqnn.experiments.zero_noise_extrapolation import (
+    fit_zero_noise_extrapolation,
+    summarize_zero_noise_extrapolation_directory,
+)
 
 __all__ = [
     "BackendBenchmarkConfig",
@@ -63,6 +67,7 @@ __all__ = [
     "noisy_comparison_job_from_index",
     "paper_test_ratios",
     "paper_training_ratios",
+    "fit_zero_noise_extrapolation",
     "run_backend_benchmark",
     "run_benchmark_sweep",
     "run_calibration_sweep",
@@ -70,5 +75,6 @@ __all__ = [
     "run_paper_reproduction_suite",
     "run_training_experiment",
     "summarize_noisy_comparison_directory",
+    "summarize_zero_noise_extrapolation_directory",
     "summarize_experiment_directory",
 ]

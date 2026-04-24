@@ -91,6 +91,92 @@ def check_global_su2_equivariance(model: object, num_trials: int = 10) -> dict[s
     return model_invariance_error(model, num_trials=num_trials)
 
 
+def estimate_equivariance_error(
+    model: object,
+    states: np.ndarray,
+    *,
+    num_symmetry_samples: int = 8,
+    seed: int | None = None,
+    backend: object | None = None,
+) -> dict[str, float | bool | str | int]:
+    """Estimate empirical prediction drift under sampled global SU(2) transformations.
+
+    This is intentionally lightweight: it measures the mean and max absolute
+    prediction change under sampled global SU(2) rotations. If the model does
+    not expose the expected prediction surface, the diagnostic reports that
+    cleanly instead of fabricating a value. It is an empirical stability check,
+    not a theoretical certificate of equivariance.
+    """
+
+    del backend
+    if not hasattr(model, "predict"):
+        return {
+            "available": False,
+            "note": "model does not expose predict(state)",
+            "mean_error": 0.0,
+            "max_error": 0.0,
+            "num_state_samples": 0,
+            "num_symmetry_samples": int(num_symmetry_samples),
+        }
+    if not hasattr(model, "config") or not hasattr(model.config, "num_qubits"):
+        return {
+            "available": False,
+            "note": "model does not expose config.num_qubits",
+            "mean_error": 0.0,
+            "max_error": 0.0,
+            "num_state_samples": 0,
+            "num_symmetry_samples": int(num_symmetry_samples),
+        }
+
+    state_array = np.asarray(states, dtype=np.complex128)
+    if state_array.ndim == 1:
+        state_array = state_array[np.newaxis, :]
+    if state_array.ndim != 2:
+        return {
+            "available": False,
+            "note": "states must have shape (num_states, hilbert_dimension)",
+            "mean_error": 0.0,
+            "max_error": 0.0,
+            "num_state_samples": 0,
+            "num_symmetry_samples": int(num_symmetry_samples),
+        }
+
+    base_seed = 0 if seed is None else int(seed)
+    errors: list[float] = []
+    num_qubits = int(model.config.num_qubits)
+
+    for state_index, state in enumerate(state_array):
+        baseline = float(model.predict(state))
+        for sample_index in range(int(num_symmetry_samples)):
+            rotation = random_su2_rotation(
+                num_qubits,
+                base_seed + 10_000 * state_index + sample_index,
+            )
+            transformed_state = rotation @ state
+            transformed_prediction = float(model.predict(transformed_state))
+            errors.append(abs(baseline - transformed_prediction))
+
+    if not errors:
+        return {
+            "available": False,
+            "note": "no states were provided",
+            "mean_error": 0.0,
+            "max_error": 0.0,
+            "num_state_samples": 0,
+            "num_symmetry_samples": int(num_symmetry_samples),
+        }
+
+    error_array = np.asarray(errors, dtype=np.float64)
+    return {
+        "available": True,
+        "note": "empirical_prediction_drift_under_sampled_global_su2",
+        "mean_error": float(np.mean(error_array)),
+        "max_error": float(np.max(error_array)),
+        "num_state_samples": int(state_array.shape[0]),
+        "num_symmetry_samples": int(num_symmetry_samples),
+    }
+
+
 def _summarize_errors(errors: list[float]) -> dict[str, float]:
     error_array = np.asarray(errors, dtype=np.float64)
     return {

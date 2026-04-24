@@ -113,6 +113,46 @@ class QiskitBackendTests(unittest.TestCase):
         )
         self.assertAlmostEqual(mixed_forward.probability, pure_forward.probability, places=10)
 
+    def test_qiskit_mixed_coherent_overrotation_stochastic_modes_smoke(self) -> None:
+        hamiltonian = BondAlternatingHeisenbergHamiltonian(num_qubits=4)
+        _, state = hamiltonian.ground_state(1.0)
+        parameters = np.asarray((0.02, -0.01, 0.03), dtype=np.float64)
+
+        model_zero = SU2QCNN(
+            QCNNConfig(num_qubits=4),
+            parameters=parameters,
+            backend=QiskitMixedStateBackend(
+                noise_config=noise_config_from_strength(
+                    "coherent_overrotation",
+                    0.1,
+                    coherent_overrotation_mode="stochastic",
+                    coherent_overrotation_probability=0.0,
+                    coherent_overrotation_seed=7,
+                )
+            ),
+        )
+        model_one = SU2QCNN(
+            QCNNConfig(num_qubits=4),
+            parameters=parameters,
+            backend=QiskitMixedStateBackend(
+                noise_config=noise_config_from_strength(
+                    "coherent_overrotation",
+                    0.1,
+                    coherent_overrotation_mode="stochastic",
+                    coherent_overrotation_probability=1.0,
+                    coherent_overrotation_seed=7,
+                )
+            ),
+        )
+
+        forward_zero = model_zero.forward(state)
+        forward_one = model_one.forward(state)
+
+        self.assertEqual(forward_zero.final_density_matrix.shape, (4, 4))
+        self.assertEqual(forward_one.final_density_matrix.shape, (4, 4))
+        self.assertTrue(np.isfinite(forward_zero.probability))
+        self.assertTrue(np.isfinite(forward_one.probability))
+
     def test_qiskit_mixed_noisy_runner_smoke_writes_artifacts(self) -> None:
         dataset = generate_dataset(HeisenbergDatasetConfig(num_qubits=4, num_points=5, split_seed=9))
         backend = QiskitMixedStateBackend(

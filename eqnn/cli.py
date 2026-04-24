@@ -24,6 +24,7 @@ from eqnn.experiments import (
     run_paper_reproduction_suite,
     run_training_experiment,
     summarize_noisy_comparison_directory,
+    summarize_zero_noise_extrapolation_directory,
     summarize_experiment_directory,
 )
 from eqnn.training import TrainingConfig
@@ -217,7 +218,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=("su2_qcnn", "hea_qcnn"),
     )
     noisy_parser.add_argument("--num-qubits-values", type=int, nargs="+", default=(4, 6))
-    noisy_parser.add_argument("--train-sizes", type=int, nargs="+", default=(4, 8))
+    noisy_parser.add_argument("--train-sizes", type=int, nargs="+", default=(4, 8, 12))
     noisy_parser.add_argument("--epochs-values", type=int, nargs="+", default=(10,))
     noisy_parser.add_argument("--random-seeds", type=int, nargs="+", default=(0, 1))
     noisy_parser.add_argument(
@@ -240,6 +241,33 @@ def build_parser() -> argparse.ArgumentParser:
         "--odd-qubits-only",
         action="store_true",
         help="Restrict the configured num-qubits sweep to odd system sizes only.",
+    )
+    noisy_parser.add_argument(
+        "--coherent-overrotation-mode",
+        choices=("fixed", "stochastic", "random_angle", "pair_dependent"),
+        default="fixed",
+    )
+    noisy_parser.add_argument("--coherent-overrotation-probability", type=float, default=1.0)
+    noisy_parser.add_argument("--coherent-overrotation-angle-std", type=float, default=0.0)
+    noisy_parser.add_argument("--coherent-overrotation-seed", type=int, default=None)
+    noisy_parser.add_argument(
+        "--noise-application-scope",
+        choices=("active", "all", "selected_qubits"),
+        default="active",
+    )
+    noisy_parser.add_argument(
+        "--noisy-qubit-indices",
+        type=int,
+        nargs="+",
+        default=None,
+        help="Optional sweep over individual noisy qubit indices. Each value produces a separate selected-qubit run.",
+    )
+    noisy_parser.add_argument(
+        "--single-qubit-error-profile",
+        type=float,
+        nargs="+",
+        default=None,
+        help="Optional per-qubit single-qubit noise strengths used for amplitude/phase/single-qubit depolarizing channels.",
     )
     noisy_parser.add_argument("--learning-rate", type=float, default=5e-2)
     noisy_parser.add_argument(
@@ -265,6 +293,9 @@ def build_parser() -> argparse.ArgumentParser:
     noisy_parser.add_argument("--job-index", type=int, default=None)
     noisy_parser.add_argument("--aggregate-only", action="store_true")
     noisy_parser.add_argument("--force-rerun", action="store_true")
+    noisy_parser.add_argument("--compute-symmetry-diagnostics", action="store_true")
+    noisy_parser.add_argument("--num-symmetry-samples", type=int, default=8)
+    noisy_parser.add_argument("--num-state-samples-for-diagnostic", type=int, default=8)
     noisy_parser.add_argument("--profile-json", type=Path, default=None)
     noisy_parser.add_argument("--output-dir", type=Path, required=True)
     noisy_parser.set_defaults(handler=_handle_run_noisy_comparison)
@@ -278,6 +309,17 @@ def build_parser() -> argparse.ArgumentParser:
     noisy_summary_parser.add_argument("--output-csv", type=Path, default=None)
     noisy_summary_parser.add_argument("--runs-output-json", type=Path, default=None)
     noisy_summary_parser.set_defaults(handler=_handle_summarize_noisy_comparison)
+
+    zne_parser = subparsers.add_parser(
+        "summarize-zne",
+        help="Fit a simple zero-noise extrapolation summary from completed noisy comparison runs.",
+    )
+    zne_parser.add_argument("--input-dir", type=Path, required=True)
+    zne_parser.add_argument("--metric", default="test_accuracy")
+    zne_parser.add_argument("--fit-type", choices=("linear",), default="linear")
+    zne_parser.add_argument("--output-json", type=Path, default=None)
+    zne_parser.add_argument("--output-csv", type=Path, default=None)
+    zne_parser.set_defaults(handler=_handle_summarize_zne)
 
     reproduction_parser = subparsers.add_parser(
         "run-paper-reproduction",
@@ -523,6 +565,11 @@ def _handle_run_calibration_sweep(args: argparse.Namespace) -> int:
 
 def _handle_run_noisy_comparison(args: argparse.Namespace) -> int:
     profile = RuntimeProfile()
+    noisy_qubit_indices = (
+        (None,)
+        if args.noisy_qubit_indices is None
+        else tuple(int(index) for index in args.noisy_qubit_indices)
+    )
     config = NoisyComparisonConfig(
         model_families=tuple(args.model_families),
         num_qubits_values=tuple(args.num_qubits_values),
@@ -533,6 +580,15 @@ def _handle_run_noisy_comparison(args: argparse.Namespace) -> int:
         noise_model_name=args.noise_model_name,
         noise_strength_values=tuple(args.noise_strength_values),
         odd_qubits_only=bool(args.odd_qubits_only),
+        coherent_overrotation_mode=args.coherent_overrotation_mode,
+        coherent_overrotation_probability=args.coherent_overrotation_probability,
+        coherent_overrotation_angle_std=args.coherent_overrotation_angle_std,
+        coherent_overrotation_seed=args.coherent_overrotation_seed,
+        noise_application_scope=args.noise_application_scope,
+        noisy_qubit_indices=noisy_qubit_indices,
+        single_qubit_error_profile=(
+            None if args.single_qubit_error_profile is None else tuple(args.single_qubit_error_profile)
+        ),
         learning_rate=args.learning_rate,
         gradient_backend=args.gradient_backend,
         initialization_strategy=args.initialization_strategy,
@@ -542,6 +598,9 @@ def _handle_run_noisy_comparison(args: argparse.Namespace) -> int:
         right_ratio_max=args.right_ratio_max,
         dense_test_points=args.dense_test_points,
         eigensolver=args.eigensolver,
+        compute_symmetry_diagnostics=bool(args.compute_symmetry_diagnostics),
+        num_symmetry_samples=args.num_symmetry_samples,
+        num_state_samples_for_diagnostic=args.num_state_samples_for_diagnostic,
     )
     results = run_noisy_comparison(
         config,
@@ -575,6 +634,19 @@ def _handle_summarize_noisy_comparison(args: argparse.Namespace) -> int:
     )
     print(f"Aggregated {len(result['runs'])} noisy comparison runs")
     print(f"Summary written to {result['summary_output_csv']}")
+    return 0
+
+
+def _handle_summarize_zne(args: argparse.Namespace) -> int:
+    result = summarize_zero_noise_extrapolation_directory(
+        args.input_dir,
+        metric_name=args.metric,
+        fit_type=args.fit_type,
+        output_json=args.output_json,
+        output_csv=args.output_csv,
+    )
+    print(f"Wrote {len(result['zne_rows'])} zero-noise extrapolation rows")
+    print(f"Summary written to {result['output_csv']}")
     return 0
 
 

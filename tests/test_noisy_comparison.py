@@ -18,6 +18,7 @@ from eqnn.experiments import (
     run_noisy_comparison,
     summarize_noisy_comparison_directory,
 )
+from eqnn.experiments.noisy_comparison import _job_output_dir
 
 
 class NoisyComparisonTests(unittest.TestCase):
@@ -69,6 +70,42 @@ class NoisyComparisonTests(unittest.TestCase):
         self.assertEqual([job.num_qubits for job in jobs], [5, 7])
         self.assertEqual(jobs[1], noisy_comparison_job_from_index(config, 1))
 
+    def test_coherent_overrotation_and_noisy_qubit_indices_expand_jobs(self) -> None:
+        config = NoisyComparisonConfig(
+            model_families=("su2_qcnn",),
+            num_qubits_values=(5,),
+            train_sizes=(2,),
+            epochs_values=(1,),
+            random_seeds=(0,),
+            noise_model_name="coherent_overrotation",
+            noise_strength_values=(0.01,),
+            coherent_overrotation_mode="stochastic",
+            noisy_qubit_indices=(None, 0, 2),
+            dense_test_points=11,
+        )
+
+        jobs = enumerate_noisy_comparison_jobs(config)
+
+        self.assertEqual(len(jobs), 3)
+        self.assertEqual([job.noisy_qubit_index for job in jobs], [None, 0, 2])
+        self.assertEqual(config.noise_model_name, "coherent_overrotation")
+
+    def test_default_job_output_dir_preserves_legacy_layout(self) -> None:
+        config = NoisyComparisonConfig(
+            model_families=("su2_qcnn",),
+            num_qubits_values=(4,),
+            train_sizes=(2,),
+            epochs_values=(1,),
+            random_seeds=(0,),
+            noise_strength_values=(0.01,),
+            dense_test_points=11,
+        )
+        job = enumerate_noisy_comparison_jobs(config)[0]
+        path = _job_output_dir(Path("/tmp/noisy"), config, job)
+
+        self.assertNotIn("scope_active", str(path))
+        self.assertNotIn("noisy_qubit_none", str(path))
+
     def test_config_validation_errors_are_clear(self) -> None:
         with self.assertRaisesRegex(ValueError, "No odd qubit counts remain"):
             NoisyComparisonConfig(
@@ -91,6 +128,19 @@ class NoisyComparisonTests(unittest.TestCase):
                 random_seeds=(0,),
                 noise_model_name="depolarizing",
                 noise_strength_values=(1.5,),
+                dense_test_points=11,
+            )
+
+        with self.assertRaisesRegex(ValueError, "requires at least one explicit noisy_qubit_index"):
+            NoisyComparisonConfig(
+                model_families=("su2_qcnn",),
+                num_qubits_values=(5,),
+                train_sizes=(2,),
+                epochs_values=(1,),
+                random_seeds=(0,),
+                noise_strength_values=(0.0,),
+                noise_application_scope="selected_qubits",
+                noisy_qubit_indices=(None,),
                 dense_test_points=11,
             )
 
@@ -182,6 +232,165 @@ class NoisyComparisonTests(unittest.TestCase):
             aggregated = aggregate_noisy_comparison_runs(results["runs"])
             self.assertEqual(len(aggregated), 2)
             self.assertEqual({row["noise_strength"] for row in aggregated}, {0.0, 0.01})
+
+    def test_aggregation_keeps_noisy_qubit_and_overrotation_modes_separate(self) -> None:
+        rows = [
+            {
+                "job_index": 0,
+                "backend_name": "qiskit_mixed",
+                "model_family": "su2_qcnn",
+                "num_qubits": 5,
+                "train_size": 4,
+                "epochs": 10,
+                "noise_model_name": "coherent_overrotation",
+                "noise_strength": 0.01,
+                "noise_application_scope": "selected_qubits",
+                "noisy_qubit_index": 0,
+                "coherent_overrotation_mode": "fixed",
+                "coherent_overrotation_probability": 1.0,
+                "coherent_overrotation_angle_std": 0.0,
+                "train_accuracy": 0.8,
+                "test_accuracy": 0.7,
+                "train_loss": 0.5,
+                "test_loss": 0.6,
+                "classification_threshold": 0.5,
+                "runtime_seconds": 1.0,
+            },
+            {
+                "job_index": 1,
+                "backend_name": "qiskit_mixed",
+                "model_family": "su2_qcnn",
+                "num_qubits": 5,
+                "train_size": 4,
+                "epochs": 10,
+                "noise_model_name": "coherent_overrotation",
+                "noise_strength": 0.01,
+                "noise_application_scope": "selected_qubits",
+                "noisy_qubit_index": 1,
+                "coherent_overrotation_mode": "fixed",
+                "coherent_overrotation_probability": 1.0,
+                "coherent_overrotation_angle_std": 0.0,
+                "train_accuracy": 0.81,
+                "test_accuracy": 0.71,
+                "train_loss": 0.51,
+                "test_loss": 0.61,
+                "classification_threshold": 0.5,
+                "runtime_seconds": 1.0,
+            },
+            {
+                "job_index": 2,
+                "backend_name": "qiskit_mixed",
+                "model_family": "su2_qcnn",
+                "num_qubits": 5,
+                "train_size": 4,
+                "epochs": 10,
+                "noise_model_name": "coherent_overrotation",
+                "noise_strength": 0.01,
+                "noise_application_scope": "selected_qubits",
+                "noisy_qubit_index": 0,
+                "coherent_overrotation_mode": "stochastic",
+                "coherent_overrotation_probability": 0.5,
+                "coherent_overrotation_angle_std": 0.0,
+                "train_accuracy": 0.79,
+                "test_accuracy": 0.69,
+                "train_loss": 0.52,
+                "test_loss": 0.62,
+                "classification_threshold": 0.5,
+                "runtime_seconds": 1.0,
+            },
+        ]
+
+        aggregated = aggregate_noisy_comparison_runs(rows)
+
+        self.assertEqual(len(aggregated), 3)
+        keys = {
+            (
+                row["noisy_qubit_index"],
+                row["coherent_overrotation_mode"],
+                row["coherent_overrotation_probability"],
+            )
+            for row in aggregated
+        }
+        self.assertEqual(
+            keys,
+            {
+                (0, "fixed", 1.0),
+                (1, "fixed", 1.0),
+                (0, "stochastic", 0.5),
+            },
+        )
+
+    def test_aggregation_keeps_single_qubit_profiles_separate(self) -> None:
+        rows = [
+            {
+                "job_index": 0,
+                "backend_name": "qiskit_mixed",
+                "model_family": "hea_qcnn",
+                "num_qubits": 5,
+                "train_size": 4,
+                "epochs": 10,
+                "noise_model_name": "amplitude_damping",
+                "noise_strength": 0.02,
+                "noise_primary_strength": 0.02,
+                "noise_application_scope": "all",
+                "noisy_qubit_index": None,
+                "noisy_qubits": None,
+                "single_qubit_error_profile": [0.02, 0.03],
+                "single_qubit_depolarizing_error": 0.0,
+                "two_qubit_depolarizing_error": 0.0,
+                "amplitude_damping_gamma": 0.02,
+                "phase_damping_gamma": 0.0,
+                "coherent_overrotation_angle": 0.0,
+                "coherent_overrotation_axis": "zz",
+                "coherent_overrotation_mode": "fixed",
+                "coherent_overrotation_probability": 1.0,
+                "coherent_overrotation_angle_std": 0.0,
+                "coherent_overrotation_seed": None,
+                "pair_dependent_overrotation_angles": None,
+                "train_accuracy": 0.8,
+                "test_accuracy": 0.7,
+                "train_loss": 0.5,
+                "test_loss": 0.6,
+                "classification_threshold": 0.5,
+                "runtime_seconds": 1.0,
+            },
+            {
+                "job_index": 1,
+                "backend_name": "qiskit_mixed",
+                "model_family": "hea_qcnn",
+                "num_qubits": 5,
+                "train_size": 4,
+                "epochs": 10,
+                "noise_model_name": "amplitude_damping",
+                "noise_strength": 0.02,
+                "noise_primary_strength": 0.02,
+                "noise_application_scope": "all",
+                "noisy_qubit_index": None,
+                "noisy_qubits": None,
+                "single_qubit_error_profile": [0.02, 0.04],
+                "single_qubit_depolarizing_error": 0.0,
+                "two_qubit_depolarizing_error": 0.0,
+                "amplitude_damping_gamma": 0.02,
+                "phase_damping_gamma": 0.0,
+                "coherent_overrotation_angle": 0.0,
+                "coherent_overrotation_axis": "zz",
+                "coherent_overrotation_mode": "fixed",
+                "coherent_overrotation_probability": 1.0,
+                "coherent_overrotation_angle_std": 0.0,
+                "coherent_overrotation_seed": None,
+                "pair_dependent_overrotation_angles": None,
+                "train_accuracy": 0.79,
+                "test_accuracy": 0.69,
+                "train_loss": 0.52,
+                "test_loss": 0.62,
+                "classification_threshold": 0.5,
+                "runtime_seconds": 1.0,
+            },
+        ]
+
+        aggregated = aggregate_noisy_comparison_runs(rows)
+
+        self.assertEqual(len(aggregated), 2)
 
     def test_recursive_summary_utility_writes_outputs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
