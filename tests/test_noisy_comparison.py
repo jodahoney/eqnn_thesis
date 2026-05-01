@@ -241,6 +241,13 @@ class NoisyComparisonTests(unittest.TestCase):
         np.testing.assert_allclose(result["raw_probabilities"], [0.75, 0.75])
         np.testing.assert_allclose(result["twirled_probabilities"], [0.75, 0.75])
         self.assertAlmostEqual(result["twirled_accuracy"], 1.0)
+        self.assertAlmostEqual(
+            result["symmetry_twirled_raw_subset_accuracy"],
+            result["symmetry_twirled_test_accuracy"],
+        )
+        self.assertEqual(result["symmetry_twirled_subset_size"], 2)
+        self.assertEqual(result["symmetry_twirled_num_correct_raw_subset"], 2)
+        self.assertEqual(result["symmetry_twirled_num_correct_twirled_subset"], 2)
         self.assertAlmostEqual(result["mean_abs_twirling_shift"], 0.0)
 
         unavailable = evaluate_with_symmetry_twirling(
@@ -252,6 +259,7 @@ class NoisyComparisonTests(unittest.TestCase):
 
         self.assertFalse(unavailable["symmetry_twirling_available"])
         self.assertIn("predict", unavailable["symmetry_twirling_note"])
+        self.assertEqual(unavailable["symmetry_twirled_subset_size"], 0)
 
     def test_noise_aware_training_control_updates_and_restores_noise_config(self) -> None:
         config = NoisyComparisonConfig(
@@ -364,6 +372,8 @@ class NoisyComparisonTests(unittest.TestCase):
                 self.assertIn("noise_strength", row)
                 self.assertIn("mean_test_accuracy", row)
                 self.assertIn("mean_symmetry_twirled_test_accuracy", row)
+                self.assertIn("mean_symmetry_twirled_raw_subset_accuracy", row)
+                self.assertIn("mean_symmetry_twirled_num_correct_raw_subset", row)
                 self.assertIn("symmetry_twirled_available", row)
                 self.assertIn("mean_build_time_seconds", row)
                 self.assertIn("mean_total_training_time_seconds", row)
@@ -770,7 +780,12 @@ class NoisyComparisonTests(unittest.TestCase):
             self.assertTrue(np.isfinite(run["test_loss"]))
             self.assertIn("symmetry_twirled_available", run)
             self.assertIn("symmetry_twirled_test_accuracy", run)
+            self.assertIn("symmetry_twirled_raw_subset_accuracy", run)
+            self.assertIn("symmetry_twirled_num_correct_raw_subset", run)
+            self.assertIn("symmetry_twirled_num_correct_twirled_subset", run)
             self.assertEqual(run["num_state_samples_for_twirled_evaluation"], 1)
+            if run["symmetry_twirled_available"]:
+                self.assertEqual(run["symmetry_twirled_subset_size"], 1)
             self.assertTrue(run["noise_aware_training"])
             self.assertEqual(run["training_noise_strengths"], [0.0, 0.01])
             self.assertEqual(len(run["training_noise_schedule"]), 1)

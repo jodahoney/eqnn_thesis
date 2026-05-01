@@ -254,15 +254,32 @@ def evaluate_with_symmetry_twirling(
             "twirled_probabilities": twirled_array,
             "raw_accuracy": None,
             "twirled_accuracy": None,
+            "num_correct_raw": None,
+            "num_correct_twirled": None,
             "mean_abs_twirling_shift": float(np.mean(np.abs(twirled_array - raw_array))),
             "num_state_samples": int(len(state_list)),
             "num_symmetry_samples": int(num_symmetry_samples),
+            "symmetry_twirled_raw_subset_accuracy": None,
+            "symmetry_twirled_test_accuracy": None,
+            "symmetry_twirled_subset_size": int(len(state_list)),
+            "symmetry_twirled_num_correct_raw_subset": None,
+            "symmetry_twirled_num_correct_twirled_subset": None,
         }
         if label_array is not None:
             raw_predictions = (raw_array >= threshold_value).astype(np.int64)
             twirled_predictions = (twirled_array >= threshold_value).astype(np.int64)
-            result["raw_accuracy"] = float(np.mean(raw_predictions == label_array))
-            result["twirled_accuracy"] = float(np.mean(twirled_predictions == label_array))
+            num_correct_raw = int(np.sum(raw_predictions == label_array))
+            num_correct_twirled = int(np.sum(twirled_predictions == label_array))
+            raw_accuracy = float(num_correct_raw / int(label_array.size))
+            twirled_accuracy = float(num_correct_twirled / int(label_array.size))
+            result["raw_accuracy"] = raw_accuracy
+            result["twirled_accuracy"] = twirled_accuracy
+            result["num_correct_raw"] = num_correct_raw
+            result["num_correct_twirled"] = num_correct_twirled
+            result["symmetry_twirled_raw_subset_accuracy"] = raw_accuracy
+            result["symmetry_twirled_test_accuracy"] = twirled_accuracy
+            result["symmetry_twirled_num_correct_raw_subset"] = num_correct_raw
+            result["symmetry_twirled_num_correct_twirled_subset"] = num_correct_twirled
         return result
     except Exception as exc:  # pragma: no cover - defensive path for optional evaluation
         return _symmetry_twirling_unavailable_result(
@@ -337,9 +354,16 @@ def _symmetry_twirling_unavailable_result(
         "twirled_probabilities": empty,
         "raw_accuracy": None,
         "twirled_accuracy": None,
+        "num_correct_raw": None,
+        "num_correct_twirled": None,
         "mean_abs_twirling_shift": None,
         "num_state_samples": 0,
         "num_symmetry_samples": int(num_symmetry_samples),
+        "symmetry_twirled_raw_subset_accuracy": None,
+        "symmetry_twirled_test_accuracy": None,
+        "symmetry_twirled_subset_size": 0,
+        "symmetry_twirled_num_correct_raw_subset": None,
+        "symmetry_twirled_num_correct_twirled_subset": None,
     }
 
 

@@ -438,6 +438,10 @@ def aggregate_noisy_comparison_runs(run_rows: list[dict[str, Any]]) -> list[dict
             "test_equivariance_error_max",
             "symmetry_twirled_test_accuracy",
             "symmetry_twirled_train_accuracy",
+            "symmetry_twirled_raw_subset_accuracy",
+            "symmetry_twirled_subset_size",
+            "symmetry_twirled_num_correct_raw_subset",
+            "symmetry_twirled_num_correct_twirled_subset",
             "symmetry_twirled_mean_abs_shift",
             "mean_symmetry_penalty_history",
             "build_time_seconds",
@@ -723,6 +727,10 @@ def _run_noisy_comparison_job(
         "symmetry_twirled_note": str(symmetry_twirled_evaluation["note"]),
         "symmetry_twirled_test_accuracy": symmetry_twirled_evaluation["twirled_accuracy"],
         "symmetry_twirled_train_accuracy": None,
+        "symmetry_twirled_raw_subset_accuracy": symmetry_twirled_evaluation["raw_accuracy"],
+        "symmetry_twirled_subset_size": symmetry_twirled_evaluation["subset_size"],
+        "symmetry_twirled_num_correct_raw_subset": symmetry_twirled_evaluation["num_correct_raw"],
+        "symmetry_twirled_num_correct_twirled_subset": symmetry_twirled_evaluation["num_correct_twirled"],
         "symmetry_twirled_mean_abs_shift": symmetry_twirled_evaluation["mean_abs_twirling_shift"],
         "num_symmetry_twirl_samples": int(config.num_symmetry_twirl_samples),
         "num_state_samples_for_twirled_evaluation": symmetry_twirled_evaluation["num_state_samples"],
@@ -1072,8 +1080,17 @@ def _symmetry_twirled_evaluation_for_run(
             "available": False,
             "note": "disabled",
             "twirled_accuracy": None,
+            "raw_accuracy": None,
             "mean_abs_twirling_shift": None,
             "num_state_samples": 0,
+            "subset_size": 0,
+            "num_correct_raw": None,
+            "num_correct_twirled": None,
+            "symmetry_twirled_raw_subset_accuracy": None,
+            "symmetry_twirled_test_accuracy": None,
+            "symmetry_twirled_subset_size": 0,
+            "symmetry_twirled_num_correct_raw_subset": None,
+            "symmetry_twirled_num_correct_twirled_subset": None,
         }
 
     try:
@@ -1119,8 +1136,23 @@ def _symmetry_twirled_evaluation_for_run(
             "twirled_probabilities": evaluation.get("twirled_probabilities"),
             "raw_accuracy": evaluation.get("raw_accuracy"),
             "twirled_accuracy": evaluation.get("twirled_accuracy"),
+            "num_correct_raw": evaluation.get("num_correct_raw"),
+            "num_correct_twirled": evaluation.get("num_correct_twirled"),
+            "symmetry_twirled_raw_subset_accuracy": evaluation.get("symmetry_twirled_raw_subset_accuracy"),
+            "symmetry_twirled_test_accuracy": evaluation.get("symmetry_twirled_test_accuracy"),
+            "symmetry_twirled_subset_size": evaluation.get("symmetry_twirled_subset_size"),
+            "symmetry_twirled_num_correct_raw_subset": evaluation.get(
+                "symmetry_twirled_num_correct_raw_subset"
+            ),
+            "symmetry_twirled_num_correct_twirled_subset": evaluation.get(
+                "symmetry_twirled_num_correct_twirled_subset"
+            ),
             "mean_abs_twirling_shift": evaluation.get("mean_abs_twirling_shift"),
             "num_state_samples": evaluation.get("num_state_samples", 0),
+            "subset_size": evaluation.get(
+                "symmetry_twirled_subset_size",
+                evaluation.get("num_state_samples", 0),
+            ),
             "num_symmetry_samples": evaluation.get("num_symmetry_samples", config.num_symmetry_twirl_samples),
         }
     except Exception as exc:  # pragma: no cover - defensive path for optional evaluation
@@ -1128,8 +1160,17 @@ def _symmetry_twirled_evaluation_for_run(
             "available": False,
             "note": f"not_available: {type(exc).__name__}: {exc}",
             "twirled_accuracy": None,
+            "raw_accuracy": None,
             "mean_abs_twirling_shift": None,
             "num_state_samples": 0,
+            "subset_size": 0,
+            "num_correct_raw": None,
+            "num_correct_twirled": None,
+            "symmetry_twirled_raw_subset_accuracy": None,
+            "symmetry_twirled_test_accuracy": None,
+            "symmetry_twirled_subset_size": 0,
+            "symmetry_twirled_num_correct_raw_subset": None,
+            "symmetry_twirled_num_correct_twirled_subset": None,
         }
 
 
@@ -1194,6 +1235,14 @@ def _write_summary_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "variance_symmetry_twirled_test_accuracy",
         "mean_symmetry_twirled_train_accuracy",
         "variance_symmetry_twirled_train_accuracy",
+        "mean_symmetry_twirled_raw_subset_accuracy",
+        "variance_symmetry_twirled_raw_subset_accuracy",
+        "mean_symmetry_twirled_subset_size",
+        "variance_symmetry_twirled_subset_size",
+        "mean_symmetry_twirled_num_correct_raw_subset",
+        "variance_symmetry_twirled_num_correct_raw_subset",
+        "mean_symmetry_twirled_num_correct_twirled_subset",
+        "variance_symmetry_twirled_num_correct_twirled_subset",
         "mean_symmetry_twirled_mean_abs_shift",
         "variance_symmetry_twirled_mean_abs_shift",
         "mean_mean_symmetry_penalty_history",
