@@ -6,7 +6,7 @@ import csv
 import json
 from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 
@@ -177,6 +177,8 @@ def run_training_experiment(
     experiment_name: str | None = None,
     backend: QCNNBackend | None = None,
     profile: RuntimeProfile | None = None,
+    training_epoch_callback: Callable[[int, TrainableModel], dict[str, Any] | None] | None = None,
+    post_training_callback: Callable[[TrainableModel], None] | None = None,
 ) -> dict[str, Any]:
     with timed(profile, "experiment.build_model"):
         model = build_model(experiment_config, backend=backend)
@@ -188,7 +190,16 @@ def run_training_experiment(
         trainer = Trainer(training_config)
 
     with timed(profile, "experiment.train_fit"):
-        history = trainer.fit(model, dataset, profile=profile)
+        history = trainer.fit(
+            model,
+            dataset,
+            profile=profile,
+            epoch_callback=training_epoch_callback,
+        )
+
+    if post_training_callback is not None:
+        with timed(profile, "experiment.post_training_callback"):
+            post_training_callback(model)
 
     with timed(profile, "experiment.final_train_evaluate"):
         train_metrics = trainer.evaluate(model, dataset.train, profile=profile)

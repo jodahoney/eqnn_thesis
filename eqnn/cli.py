@@ -296,6 +296,24 @@ def build_parser() -> argparse.ArgumentParser:
     noisy_parser.add_argument("--compute-symmetry-diagnostics", action="store_true")
     noisy_parser.add_argument("--num-symmetry-samples", type=int, default=8)
     noisy_parser.add_argument("--num-state-samples-for-diagnostic", type=int, default=8)
+    noisy_parser.add_argument("--compute-symmetry-twirled-evaluation", action="store_true")
+    noisy_parser.add_argument("--num-symmetry-twirl-samples", type=int, default=8)
+    noisy_parser.add_argument("--symmetry-twirl-seed", type=int, default=None)
+    noisy_parser.add_argument("--num-state-samples-for-twirled-evaluation", type=int, default=None)
+    noisy_parser.add_argument("--noise-aware-training", action="store_true")
+    noisy_parser.add_argument("--training-noise-strengths", type=float, nargs="+", default=None)
+    noisy_parser.add_argument(
+        "--training-noise-sampling",
+        choices=("per_epoch",),
+        default="per_epoch",
+    )
+    noisy_parser.add_argument("--training-noise-seed", type=int, default=None)
+    noisy_parser.add_argument("--symmetry-regularization", action="store_true")
+    noisy_parser.add_argument("--symmetry-regularization-weight", type=float, default=0.0)
+    noisy_parser.add_argument("--num-symmetry-regularization-samples", type=int, default=2)
+    noisy_parser.add_argument("--symmetry-regularization-frequency", type=int, default=1)
+    noisy_parser.add_argument("--symmetry-regularization-state-samples", type=int, default=None)
+    noisy_parser.add_argument("--symmetry-regularization-seed", type=int, default=None)
     noisy_parser.add_argument("--profile-json", type=Path, default=None)
     noisy_parser.add_argument("--output-dir", type=Path, required=True)
     noisy_parser.set_defaults(handler=_handle_run_noisy_comparison)
@@ -316,7 +334,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     zne_parser.add_argument("--input-dir", type=Path, required=True)
     zne_parser.add_argument("--metric", default="test_accuracy")
-    zne_parser.add_argument("--fit-type", choices=("linear",), default="linear")
+    zne_parser.add_argument("--fit-type", choices=("linear", "quadratic"), default="linear")
+    zne_parser.add_argument("--max-noise-strength", type=float, default=None)
+    zne_parser.add_argument("--noise-strengths", type=float, nargs="+", default=None)
     zne_parser.add_argument("--output-json", type=Path, default=None)
     zne_parser.add_argument("--output-csv", type=Path, default=None)
     zne_parser.set_defaults(handler=_handle_summarize_zne)
@@ -601,6 +621,22 @@ def _handle_run_noisy_comparison(args: argparse.Namespace) -> int:
         compute_symmetry_diagnostics=bool(args.compute_symmetry_diagnostics),
         num_symmetry_samples=args.num_symmetry_samples,
         num_state_samples_for_diagnostic=args.num_state_samples_for_diagnostic,
+        compute_symmetry_twirled_evaluation=bool(args.compute_symmetry_twirled_evaluation),
+        num_symmetry_twirl_samples=args.num_symmetry_twirl_samples,
+        symmetry_twirl_seed=args.symmetry_twirl_seed,
+        num_state_samples_for_twirled_evaluation=args.num_state_samples_for_twirled_evaluation,
+        noise_aware_training=bool(args.noise_aware_training),
+        training_noise_strengths=(
+            tuple(args.training_noise_strengths) if args.training_noise_strengths is not None else ()
+        ),
+        training_noise_sampling=args.training_noise_sampling,
+        training_noise_seed=args.training_noise_seed,
+        symmetry_regularization=bool(args.symmetry_regularization),
+        symmetry_regularization_weight=args.symmetry_regularization_weight,
+        num_symmetry_regularization_samples=args.num_symmetry_regularization_samples,
+        symmetry_regularization_frequency=args.symmetry_regularization_frequency,
+        symmetry_regularization_state_samples=args.symmetry_regularization_state_samples,
+        symmetry_regularization_seed=args.symmetry_regularization_seed,
     )
     results = run_noisy_comparison(
         config,
@@ -642,6 +678,8 @@ def _handle_summarize_zne(args: argparse.Namespace) -> int:
         args.input_dir,
         metric_name=args.metric,
         fit_type=args.fit_type,
+        max_noise_strength=args.max_noise_strength,
+        noise_strengths=args.noise_strengths,
         output_json=args.output_json,
         output_csv=args.output_csv,
     )

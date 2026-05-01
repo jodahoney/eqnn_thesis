@@ -34,3 +34,5 @@ In noisy comparison sweeps:
 For `selected_qubits`, selected indices target qubits while they are present in the current effective register. After pooling or coarse-graining, selected indices outside the current effective register are skipped for that layer instead of treated as errors.
 
 The optional symmetry diagnostic recorded by noisy comparison is an empirical prediction-drift diagnostic under sampled global SU(2) transformations. It is useful as a smoke-level robustness check, not a theoretical certificate.
+
+Post-processing error mitigation utilities are summarized in [`error_mitigation_notes.md`](/Users/joda/Desktop/stanford/eqnn_thesis/docs/error_mitigation_notes.md).

@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 
@@ -17,9 +17,34 @@ def fit_zero_noise_extrapolation(
     *,
     metric_name: str = "test_accuracy",
     fit_type: str = "linear",
+    max_noise_strength: float | None = None,
+    noise_strengths: Sequence[float] | None = None,
+    min_points: int | None = None,
 ) -> list[dict[str, Any]]:
-    if fit_type != "linear":
-        raise ValueError("Only fit_type='linear' is currently supported")
+    fit_degrees = {"linear": 1, "quadratic": 2}
+    if fit_type not in fit_degrees:
+        raise ValueError("fit_type must be 'linear' or 'quadratic'")
+
+    degree = fit_degrees[fit_type]
+    default_min_points = degree + 1
+    if min_points is None:
+        required_points = default_min_points
+    else:
+        required_points = int(min_points)
+        if required_points < default_min_points:
+            raise ValueError(f"min_points must be at least {default_min_points} for fit_type='{fit_type}'")
+
+    max_noise_value = None if max_noise_strength is None else float(max_noise_strength)
+    if max_noise_value is not None and not np.isfinite(max_noise_value):
+        raise ValueError("max_noise_strength must be finite when provided")
+
+    selected_noise_strengths: tuple[float, ...] | None = None
+    if noise_strengths is not None:
+        selected_noise_strengths = tuple(float(value) for value in noise_strengths)
+        if not selected_noise_strengths:
+            raise ValueError("noise_strengths must not be empty when provided")
+        if any(not np.isfinite(value) for value in selected_noise_strengths):
+            raise ValueError("noise_strengths must be finite")
 
     grouped: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
     for row in rows:
@@ -52,35 +77,53 @@ def fit_zero_noise_extrapolation(
                 continue
             if not np.isfinite(x_value) or not np.isfinite(y_value):
                 continue
+            if max_noise_value is not None and x_value > max_noise_value:
+                continue
+            if selected_noise_strengths is not None and not _noise_strength_selected(
+                x_value,
+                selected_noise_strengths,
+            ):
+                continue
             points.append((x_value, y_value))
 
+        points.sort(key=lambda point: point[0])
         unique_x_values = sorted({x_value for x_value, _ in points})
-        if len(points) < 2 or len(unique_x_values) < 2:
+        if len(points) < required_points or len(unique_x_values) < default_min_points:
             continue
 
         x = np.asarray([point[0] for point in points], dtype=np.float64)
         y = np.asarray([point[1] for point in points], dtype=np.float64)
-        slope, intercept = np.polyfit(x, y, deg=1)
-        zne_rows.append(
-            {
-                "backend_name": key[0],
-                "model_family": key[1],
-                "num_qubits": key[2],
-                "train_size": key[3],
-                "epochs": key[4],
-                "seed": key[5],
-                "noise_model_name": key[6],
-                "noise_application_scope": key[7],
-                "noisy_qubit_index": key[8],
-                "coherent_overrotation_mode": key[9],
-                "zne_metric_name": metric_name,
-                "zne_fit_type": fit_type,
-                "zne_estimate": float(intercept),
-                "zne_slope": float(slope),
-                "zne_intercept": float(intercept),
-                "zne_num_points": int(len(points)),
-            }
-        )
+        coefficients = np.polyfit(x, y, deg=degree)
+        fitted = np.polyval(coefficients, x)
+        residual_mse = float(np.mean((y - fitted) ** 2))
+        intercept = float(coefficients[-1])
+        zne_row = {
+            "backend_name": key[0],
+            "model_family": key[1],
+            "num_qubits": key[2],
+            "train_size": key[3],
+            "epochs": key[4],
+            "seed": key[5],
+            "noise_model_name": key[6],
+            "noise_application_scope": key[7],
+            "noisy_qubit_index": key[8],
+            "coherent_overrotation_mode": key[9],
+            "zne_metric_name": metric_name,
+            "zne_fit_type": fit_type,
+            "zne_estimate": intercept,
+            "zne_intercept": intercept,
+            "zne_num_points": int(len(points)),
+            "zne_noise_strengths_used": [float(point[0]) for point in points],
+            "zne_max_noise_strength": float(np.max(x)),
+            "zne_residual_mse": residual_mse,
+        }
+        if fit_type == "linear":
+            zne_row["zne_slope"] = float(coefficients[0])
+        else:
+            zne_row["zne_quadratic_coeff"] = float(coefficients[0])
+            zne_row["zne_linear_coeff"] = float(coefficients[1])
+            zne_row["zne_slope"] = float(coefficients[1])
+        zne_rows.append(zne_row)
 
     zne_rows.sort(
         key=lambda row: (
@@ -104,12 +147,20 @@ def summarize_zero_noise_extrapolation_directory(
     *,
     metric_name: str = "test_accuracy",
     fit_type: str = "linear",
+    max_noise_strength: float | None = None,
+    noise_strengths: Sequence[float] | None = None,
     output_json: str | Path | None = None,
     output_csv: str | Path | None = None,
 ) -> dict[str, Any]:
     input_path = Path(input_dir)
     run_rows = load_completed_noisy_comparison_runs(input_path)
-    zne_rows = fit_zero_noise_extrapolation(run_rows, metric_name=metric_name, fit_type=fit_type)
+    zne_rows = fit_zero_noise_extrapolation(
+        run_rows,
+        metric_name=metric_name,
+        fit_type=fit_type,
+        max_noise_strength=max_noise_strength,
+        noise_strengths=noise_strengths,
+    )
 
     resolved_output_json = input_path / "zne_summary.json" if output_json is None else Path(output_json)
     resolved_output_csv = input_path / "zne_summary.csv" if output_csv is None else Path(output_csv)
@@ -144,6 +195,11 @@ def _write_zne_csv(path: Path, rows: list[dict[str, Any]]) -> None:
             "zne_slope",
             "zne_intercept",
             "zne_num_points",
+            "zne_noise_strengths_used",
+            "zne_max_noise_strength",
+            "zne_residual_mse",
+            "zne_quadratic_coeff",
+            "zne_linear_coeff",
         )
     else:
         fieldnames = tuple(rows[0].keys())
@@ -152,6 +208,10 @@ def _write_zne_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _noise_strength_selected(value: float, selected_noise_strengths: Sequence[float]) -> bool:
+    return any(np.isclose(value, selected, rtol=1e-9, atol=1e-12) for selected in selected_noise_strengths)
 
 
 __all__ = [

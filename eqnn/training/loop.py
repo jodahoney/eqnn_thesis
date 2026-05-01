@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any, Callable
 
 import numpy as np
 
 from eqnn.datasets.heisenberg import DatasetBundle, DatasetSplit
 from eqnn.models.base import TrainableModel
+from eqnn.verification.equivariance import random_su2_rotation
 from eqnn.utils.timing import RuntimeProfile, timed
 
 
@@ -31,6 +33,12 @@ class TrainingConfig:
     classification_threshold: float = 0.5
     threshold_update: str = "none"
     threshold_critical_ratio: float = 1.0
+    symmetry_regularization: bool = False
+    symmetry_regularization_weight: float = 0.0
+    num_symmetry_regularization_samples: int = 2
+    symmetry_regularization_frequency: int = 1
+    symmetry_regularization_state_samples: int | None = None
+    symmetry_regularization_seed: int | None = None
 
     def __post_init__(self) -> None:
         if self.epochs < 1:
@@ -61,6 +69,14 @@ class TrainingConfig:
             raise ValueError(
                 "threshold_update must be 'none' or 'paper_nearest_critical'"
             )
+        if self.symmetry_regularization_weight < 0.0:
+            raise ValueError("symmetry_regularization_weight must be non-negative")
+        if self.num_symmetry_regularization_samples < 1:
+            raise ValueError("num_symmetry_regularization_samples must be at least 1")
+        if self.symmetry_regularization_frequency < 1:
+            raise ValueError("symmetry_regularization_frequency must be at least 1")
+        if self.symmetry_regularization_state_samples is not None and self.symmetry_regularization_state_samples < 1:
+            raise ValueError("symmetry_regularization_state_samples must be at least 1 when provided")
 
 
 class Trainer:
@@ -75,6 +91,7 @@ class Trainer:
         dataset: DatasetSplit | DatasetBundle,
         *,
         profile: RuntimeProfile | None = None,
+        epoch_callback: Callable[[int, TrainableModel], dict[str, Any] | None] | None = None,
     ) -> dict[str, object]:
         split = self._coerce_split(dataset)
         base_parameters = model.get_parameters()
@@ -88,7 +105,14 @@ class Trainer:
             initial_parameters = self._initialize_parameters(base_parameters, rng)
             model.set_parameters(initial_parameters)
             self._initialize_model_threshold(model)
-            history = self._fit_once(model, split, initial_parameters, rng, profile=profile)
+            history = self._fit_once(
+                model,
+                split,
+                initial_parameters,
+                rng,
+                profile=profile,
+                epoch_callback=epoch_callback,
+            )
             restart_histories.append(history)
 
             if best_history is None or float(history["best_loss"]) < float(best_history["best_loss"]):
@@ -186,13 +210,15 @@ class Trainer:
         rng: np.random.Generator,
         *,
         profile: RuntimeProfile | None = None,
+        epoch_callback: Callable[[int, TrainableModel], dict[str, Any] | None] | None = None,
     ) -> dict[str, object]:
         states = split.states
         labels = np.asarray(split.labels, dtype=np.float64)
         parameters = np.asarray(initial_parameters, dtype=np.float64).copy()
 
+        self._active_epoch = 0
         with timed(profile, "train.initial_evaluate"):
-            first_metrics = self.evaluate(model, split, parameters=parameters, profile=profile)
+            first_metrics = self._training_metrics(model, split, parameters, profile=profile)
 
         current_threshold = self._current_threshold(model)
 
@@ -206,12 +232,27 @@ class Trainer:
             "best_threshold": current_threshold,
             "initial_parameters": parameters.copy(),
         }
+        if self._symmetry_regularization_configured():
+            history["task_loss"] = [first_metrics["task_loss"]]
+            history["symmetry_penalty"] = [first_metrics["symmetry_penalty"]]
+            history["weighted_symmetry_penalty"] = [first_metrics["weighted_symmetry_penalty"]]
+            history["symmetry_regularization_active"] = [first_metrics["symmetry_regularization_active"]]
+            history["symmetry_regularization_note"] = self._symmetry_regularization_note()
+        if epoch_callback is not None:
+            history["epoch_callback"] = []
 
         first_moment = np.zeros_like(parameters)
         second_moment = np.zeros_like(parameters)
         optimization_step = 0
 
         for epoch in range(1, self.config.epochs + 1):
+            self._active_epoch = epoch
+            if epoch_callback is not None:
+                with timed(profile, "train.epoch_callback"):
+                    callback_metadata = epoch_callback(epoch, model)
+                if callback_metadata is not None:
+                    history["epoch_callback"].append(dict(callback_metadata))
+
             for batch_indices in self._iter_minibatch_indices(labels.shape[0], rng):
                 batch_states = states[batch_indices]
                 batch_labels = labels[batch_indices]
@@ -241,11 +282,16 @@ class Trainer:
                 self._maybe_update_classification_threshold(model, split, parameters)
 
             with timed(profile, "train.epoch_evaluate"):
-                metrics = self.evaluate(model, split, parameters=parameters, profile=profile)
+                metrics = self._training_metrics(model, split, parameters, profile=profile)
 
             history["loss"].append(metrics["loss"])
             history["accuracy"].append(metrics["accuracy"])
             history["threshold"].append(self._current_threshold(model))
+            if self._symmetry_regularization_configured():
+                history["task_loss"].append(metrics["task_loss"])
+                history["symmetry_penalty"].append(metrics["symmetry_penalty"])
+                history["weighted_symmetry_penalty"].append(metrics["weighted_symmetry_penalty"])
+                history["symmetry_regularization_active"].append(metrics["symmetry_regularization_active"])
 
             if metrics["loss"] < history["best_loss"]:
                 history["best_loss"] = metrics["loss"]
@@ -264,7 +310,11 @@ class Trainer:
         labels: np.ndarray,
         parameters: np.ndarray,
     ) -> np.ndarray:
-        if self.config.gradient_backend in {"auto", "exact"} and hasattr(model, "loss_gradient"):
+        if (
+            not self._symmetry_regularization_enabled()
+            and self.config.gradient_backend in {"auto", "exact"}
+            and hasattr(model, "loss_gradient")
+        ):
             try:
                 return np.asarray(
                     model.loss_gradient(
@@ -292,7 +342,7 @@ class Trainer:
                 if self.config.gradient_backend == "exact":
                     raise
 
-        if self.config.gradient_backend == "exact":
+        if self.config.gradient_backend == "exact" and not self._symmetry_regularization_enabled():
             raise ValueError("Exact gradients are not available for this model")
 
         return self._finite_difference_gradient(model, states, labels, parameters)
@@ -324,14 +374,137 @@ class Trainer:
     ) -> float:
         if hasattr(model, "loss"):
             try:
-                return float(model.loss(states, labels, parameters=parameters, loss_name=self.config.loss))
+                task_loss = float(model.loss(states, labels, parameters=parameters, loss_name=self.config.loss))
             except TypeError:
                 if self.config.loss != "bce":
                     raise
-                return float(model.loss(states, labels, parameters=parameters))
+                task_loss = float(model.loss(states, labels, parameters=parameters))
+        else:
+            probabilities = np.asarray(model.predict_batch(states, parameters=parameters), dtype=np.float64)
+            task_loss = self._loss_from_probabilities(probabilities, labels)
 
-        probabilities = np.asarray(model.predict_batch(states, parameters=parameters), dtype=np.float64)
-        return self._loss_from_probabilities(probabilities, labels)
+        if not self._symmetry_regularization_enabled() or not self._symmetry_regularization_active_for_current_epoch():
+            return float(task_loss)
+
+        penalty = self._symmetry_regularization_penalty(model, states, parameters)
+        return float(task_loss + self.config.symmetry_regularization_weight * penalty)
+
+    def _training_metrics(
+        self,
+        model: TrainableModel,
+        split: DatasetSplit,
+        parameters: np.ndarray,
+        *,
+        profile: RuntimeProfile | None = None,
+    ) -> dict[str, float | bool]:
+        task_metrics = self.evaluate(model, split, parameters=parameters, profile=profile)
+        if not self._symmetry_regularization_configured():
+            return {
+                "loss": float(task_metrics["loss"]),
+                "accuracy": float(task_metrics["accuracy"]),
+            }
+
+        penalty = self._symmetry_regularization_penalty(model, split.states, parameters)
+        active = self._symmetry_regularization_enabled() and self._symmetry_regularization_active_for_current_epoch()
+        weighted_penalty = float(self.config.symmetry_regularization_weight * penalty) if active else 0.0
+        return {
+            "loss": float(task_metrics["loss"] + weighted_penalty),
+            "task_loss": float(task_metrics["loss"]),
+            "accuracy": float(task_metrics["accuracy"]),
+            "symmetry_penalty": float(penalty),
+            "weighted_symmetry_penalty": weighted_penalty,
+            "symmetry_regularization_active": bool(active),
+        }
+
+    def _symmetry_regularization_configured(self) -> bool:
+        return bool(self.config.symmetry_regularization)
+
+    def _symmetry_regularization_enabled(self) -> bool:
+        return bool(self.config.symmetry_regularization) and float(self.config.symmetry_regularization_weight) > 0.0
+
+    def _symmetry_regularization_active_for_current_epoch(self) -> bool:
+        active_epoch = int(getattr(self, "_active_epoch", 1))
+        if active_epoch <= 0:
+            return True
+        frequency = int(self.config.symmetry_regularization_frequency)
+        return (active_epoch - 1) % frequency == 0
+
+    def _symmetry_regularization_note(self) -> str:
+        if not self._symmetry_regularization_configured():
+            return "disabled"
+        if not self._symmetry_regularization_enabled():
+            return "configured_with_zero_weight"
+        return "finite_difference_objective_regularizer"
+
+    def _symmetry_regularization_penalty(
+        self,
+        model: TrainableModel,
+        states: np.ndarray,
+        parameters: np.ndarray,
+    ) -> float:
+        if not self._symmetry_regularization_configured():
+            return 0.0
+
+        state_array = np.asarray(states, dtype=np.complex128)
+        if state_array.ndim == 1:
+            state_array = state_array[np.newaxis, :]
+        if state_array.ndim != 2 or state_array.shape[0] == 0:
+            return 0.0
+
+        state_array = self._symmetry_regularization_state_subset(state_array)
+        num_qubits = self._infer_model_num_qubits(model, state_array.shape[1])
+        base_seed = 0 if self.config.symmetry_regularization_seed is None else int(
+            self.config.symmetry_regularization_seed
+        )
+        active_epoch = int(getattr(self, "_active_epoch", 0))
+
+        penalties: list[float] = []
+        for state_index, state in enumerate(state_array):
+            baseline = self._predict_probability(model, state, parameters)
+            for sample_index in range(int(self.config.num_symmetry_regularization_samples)):
+                rotation = random_su2_rotation(
+                    num_qubits,
+                    base_seed + 100_000 * active_epoch + 1_000 * state_index + sample_index,
+                )
+                transformed_state = rotation @ state
+                transformed_prediction = self._predict_probability(model, transformed_state, parameters)
+                penalties.append(float((baseline - transformed_prediction) ** 2))
+
+        if not penalties:
+            return 0.0
+        return float(np.mean(np.asarray(penalties, dtype=np.float64)))
+
+    def _symmetry_regularization_state_subset(self, states: np.ndarray) -> np.ndarray:
+        requested = self.config.symmetry_regularization_state_samples
+        if requested is None or int(requested) >= states.shape[0]:
+            return states
+
+        base_seed = 0 if self.config.symmetry_regularization_seed is None else int(
+            self.config.symmetry_regularization_seed
+        )
+        active_epoch = int(getattr(self, "_active_epoch", 0))
+        rng = np.random.default_rng(base_seed + 7_919 * active_epoch)
+        indices = np.sort(rng.choice(states.shape[0], size=int(requested), replace=False))
+        return np.asarray(states[indices], dtype=np.complex128)
+
+    def _infer_model_num_qubits(self, model: object, dimension: int) -> int:
+        if hasattr(model, "config") and hasattr(model.config, "num_qubits"):
+            return int(model.config.num_qubits)
+        num_qubits = int(round(np.log2(int(dimension))))
+        if 1 << num_qubits != int(dimension):
+            raise ValueError("could not infer num_qubits for symmetry regularization")
+        return num_qubits
+
+    def _predict_probability(
+        self,
+        model: TrainableModel,
+        state: np.ndarray,
+        parameters: np.ndarray,
+    ) -> float:
+        try:
+            return float(model.predict(state, parameters=parameters))
+        except TypeError:
+            return float(model.predict(state))
 
     def _loss_from_probabilities(
         self,

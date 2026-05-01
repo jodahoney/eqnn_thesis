@@ -12,22 +12,25 @@ from eqnn.experiments.zero_noise_extrapolation import (
 
 
 class ZeroNoiseExtrapolationTests(unittest.TestCase):
+    def _row(self, noise_strength: float, test_accuracy: float) -> dict[str, object]:
+        return {
+            "backend_name": "qiskit_mixed",
+            "model_family": "su2_qcnn",
+            "num_qubits": 4,
+            "train_size": 4,
+            "epochs": 10,
+            "seed": 0,
+            "noise_model_name": "depolarizing",
+            "noise_application_scope": "active",
+            "noisy_qubit_index": None,
+            "coherent_overrotation_mode": None,
+            "noise_strength": noise_strength,
+            "test_accuracy": test_accuracy,
+        }
+
     def test_linear_fit_extrapolates_synthetic_rows_to_zero_noise_limit(self) -> None:
         rows = [
-            {
-                "backend_name": "qiskit_mixed",
-                "model_family": "su2_qcnn",
-                "num_qubits": 4,
-                "train_size": 4,
-                "epochs": 10,
-                "seed": 0,
-                "noise_model_name": "depolarizing",
-                "noise_application_scope": "active",
-                "noisy_qubit_index": None,
-                "coherent_overrotation_mode": None,
-                "noise_strength": noise_strength,
-                "test_accuracy": 1.0 - 2.0 * noise_strength,
-            }
+            self._row(noise_strength, 1.0 - 2.0 * noise_strength)
             for noise_strength in (0.0, 0.05, 0.1)
         ]
 
@@ -37,6 +40,61 @@ class ZeroNoiseExtrapolationTests(unittest.TestCase):
         self.assertAlmostEqual(zne_rows[0]["zne_estimate"], 1.0, places=6)
         self.assertAlmostEqual(zne_rows[0]["zne_slope"], -2.0, places=6)
         self.assertEqual(zne_rows[0]["zne_num_points"], 3)
+        self.assertEqual(zne_rows[0]["zne_noise_strengths_used"], [0.0, 0.05, 0.1])
+        self.assertAlmostEqual(zne_rows[0]["zne_residual_mse"], 0.0, places=12)
+
+    def test_quadratic_fit_extrapolates_synthetic_rows_to_zero_noise_limit(self) -> None:
+        rows = [
+            self._row(noise_strength, 1.0 - 2.0 * noise_strength + 3.0 * noise_strength**2)
+            for noise_strength in (0.0, 0.03, 0.06, 0.09)
+        ]
+
+        zne_rows = fit_zero_noise_extrapolation(rows, metric_name="test_accuracy", fit_type="quadratic")
+
+        self.assertEqual(len(zne_rows), 1)
+        self.assertAlmostEqual(zne_rows[0]["zne_estimate"], 1.0, places=6)
+        self.assertAlmostEqual(zne_rows[0]["zne_quadratic_coeff"], 3.0, places=6)
+        self.assertAlmostEqual(zne_rows[0]["zne_linear_coeff"], -2.0, places=6)
+        self.assertEqual(zne_rows[0]["zne_fit_type"], "quadratic")
+
+    def test_max_noise_strength_filter_excludes_high_noise_points(self) -> None:
+        rows = [
+            self._row(0.0, 1.0),
+            self._row(0.05, 0.9),
+            self._row(0.1, 0.2),
+        ]
+
+        zne_rows = fit_zero_noise_extrapolation(
+            rows,
+            metric_name="test_accuracy",
+            fit_type="linear",
+            max_noise_strength=0.05,
+        )
+
+        self.assertEqual(len(zne_rows), 1)
+        self.assertAlmostEqual(zne_rows[0]["zne_estimate"], 1.0, places=6)
+        self.assertEqual(zne_rows[0]["zne_noise_strengths_used"], [0.0, 0.05])
+        self.assertEqual(zne_rows[0]["zne_max_noise_strength"], 0.05)
+
+    def test_explicit_noise_strengths_filter_excludes_other_points(self) -> None:
+        rows = [
+            self._row(0.0, 1.0),
+            self._row(0.01, 0.98),
+            self._row(0.03, 0.94),
+            self._row(0.05, 0.9),
+            self._row(0.1, 0.2),
+        ]
+
+        zne_rows = fit_zero_noise_extrapolation(
+            rows,
+            metric_name="test_accuracy",
+            fit_type="linear",
+            noise_strengths=(0.0, 0.01, 0.03, 0.05),
+        )
+
+        self.assertEqual(len(zne_rows), 1)
+        self.assertAlmostEqual(zne_rows[0]["zne_estimate"], 1.0, places=6)
+        self.assertEqual(zne_rows[0]["zne_noise_strengths_used"], [0.0, 0.01, 0.03, 0.05])
 
     def test_summary_directory_writes_outputs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -86,7 +144,7 @@ class ZeroNoiseExtrapolationTests(unittest.TestCase):
     def test_cli_summarize_zne_smoke(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             input_dir = Path(tmp_dir) / "cli_zne"
-            for index, noise_strength in enumerate((0.0, 0.1)):
+            for index, noise_strength in enumerate((0.0, 0.05, 0.1)):
                 run_dir = (
                     input_dir
                     / "qiskit_mixed"
@@ -127,6 +185,14 @@ class ZeroNoiseExtrapolationTests(unittest.TestCase):
                     str(input_dir),
                     "--metric",
                     "test_accuracy",
+                    "--fit-type",
+                    "quadratic",
+                    "--max-noise-strength",
+                    "0.1",
+                    "--noise-strengths",
+                    "0.0",
+                    "0.05",
+                    "0.1",
                 ]
             )
 

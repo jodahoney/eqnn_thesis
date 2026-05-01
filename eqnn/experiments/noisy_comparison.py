@@ -22,7 +22,7 @@ from eqnn.experiments.runner import (
 from eqnn.noise import SUPPORTED_NOISE_MODELS, NoiseConfig, noise_config_from_strength
 from eqnn.training import TrainingConfig
 from eqnn.utils.timing import RuntimeProfile, timed
-from eqnn.verification import estimate_equivariance_error
+from eqnn.verification import estimate_equivariance_error, evaluate_with_symmetry_twirling
 
 
 @dataclass(frozen=True)
@@ -65,6 +65,20 @@ class NoisyComparisonConfig:
     compute_symmetry_diagnostics: bool = False
     num_symmetry_samples: int = 8
     num_state_samples_for_diagnostic: int = 8
+    compute_symmetry_twirled_evaluation: bool = False
+    num_symmetry_twirl_samples: int = 8
+    symmetry_twirl_seed: int | None = None
+    num_state_samples_for_twirled_evaluation: int | None = None
+    noise_aware_training: bool = False
+    training_noise_strengths: tuple[float, ...] = ()
+    training_noise_sampling: str = "per_epoch"
+    training_noise_seed: int | None = None
+    symmetry_regularization: bool = False
+    symmetry_regularization_weight: float = 0.0
+    num_symmetry_regularization_samples: int = 2
+    symmetry_regularization_frequency: int = 1
+    symmetry_regularization_state_samples: int | None = None
+    symmetry_regularization_seed: int | None = None
 
     def __post_init__(self) -> None:
         if not self.model_families:
@@ -130,6 +144,29 @@ class NoisyComparisonConfig:
             raise ValueError("num_symmetry_samples must be at least 1")
         if self.num_state_samples_for_diagnostic < 1:
             raise ValueError("num_state_samples_for_diagnostic must be at least 1")
+        if self.num_symmetry_twirl_samples < 1:
+            raise ValueError("num_symmetry_twirl_samples must be at least 1")
+        if (
+            self.num_state_samples_for_twirled_evaluation is not None
+            and self.num_state_samples_for_twirled_evaluation < 1
+        ):
+            raise ValueError("num_state_samples_for_twirled_evaluation must be at least 1 when provided")
+        if self.training_noise_sampling != "per_epoch":
+            raise ValueError("training_noise_sampling must be 'per_epoch'")
+        normalized_training_noise_strengths = tuple(float(value) for value in self.training_noise_strengths)
+        if self.noise_aware_training and not normalized_training_noise_strengths:
+            raise ValueError("noise_aware_training requires at least one training_noise_strength")
+        if any(not np.isfinite(value) or value < 0.0 for value in normalized_training_noise_strengths):
+            raise ValueError("training_noise_strengths must contain nonnegative finite floats")
+        object.__setattr__(self, "training_noise_strengths", normalized_training_noise_strengths)
+        if self.symmetry_regularization_weight < 0.0:
+            raise ValueError("symmetry_regularization_weight must be non-negative")
+        if self.num_symmetry_regularization_samples < 1:
+            raise ValueError("num_symmetry_regularization_samples must be at least 1")
+        if self.symmetry_regularization_frequency < 1:
+            raise ValueError("symmetry_regularization_frequency must be at least 1")
+        if self.symmetry_regularization_state_samples is not None and self.symmetry_regularization_state_samples < 1:
+            raise ValueError("symmetry_regularization_state_samples must be at least 1 when provided")
         resolved_num_qubits = self.resolved_num_qubits_values
         if not resolved_num_qubits:
             raise ValueError("No odd qubit counts remain after applying odd_qubits_only=True")
@@ -148,6 +185,16 @@ class NoisyComparisonConfig:
             elif not 0.0 <= float(value) <= 1.0:
                 raise ValueError(
                     f"noise strengths must lie in [0, 1] for noise_model_name='{canonical_noise_model}'"
+                )
+        for value in self.training_noise_strengths:
+            if canonical_noise_model == "none" and float(value) != 0.0:
+                raise ValueError("training_noise_strengths must be exactly 0.0 when noise_model_name='none'")
+            if canonical_noise_model == "coherent_overrotation":
+                if not np.isfinite(float(value)):
+                    raise ValueError("training_noise_strengths must be finite for coherent_overrotation")
+            elif not 0.0 <= float(value) <= 1.0:
+                raise ValueError(
+                    f"training_noise_strengths must lie in [0, 1] for noise_model_name='{canonical_noise_model}'"
                 )
 
     @property
@@ -320,6 +367,16 @@ def aggregate_noisy_comparison_runs(run_rows: list[dict[str, Any]]) -> list[dict
             row.get("coherent_overrotation_angle_std"),
             row.get("coherent_overrotation_seed"),
             _hashable_key_value(row.get("pair_dependent_overrotation_angles")),
+            bool(row.get("noise_aware_training", False)),
+            _hashable_key_value(row.get("training_noise_strengths")),
+            row.get("training_noise_sampling"),
+            row.get("training_noise_seed"),
+            bool(row.get("symmetry_regularization", False)),
+            row.get("symmetry_regularization_weight"),
+            row.get("num_symmetry_regularization_samples"),
+            row.get("symmetry_regularization_frequency"),
+            row.get("symmetry_regularization_state_samples"),
+            row.get("symmetry_regularization_seed"),
         )
         grouped.setdefault(key, []).append(row)
 
@@ -349,7 +406,27 @@ def aggregate_noisy_comparison_runs(run_rows: list[dict[str, Any]]) -> list[dict
             "coherent_overrotation_angle_std": key[20],
             "coherent_overrotation_seed": key[21],
             "pair_dependent_overrotation_angles": _serialize_for_json(key[22]),
+            "noise_aware_training": key[23],
+            "training_noise_strengths": _serialize_for_json(key[24]),
+            "training_noise_sampling": key[25],
+            "training_noise_seed": key[26],
+            "symmetry_regularization": key[27],
+            "symmetry_regularization_weight": key[28],
+            "num_symmetry_regularization_samples": key[29],
+            "symmetry_regularization_frequency": key[30],
+            "symmetry_regularization_state_samples": key[31],
+            "symmetry_regularization_seed": key[32],
             "num_runs": len(rows),
+            "symmetry_twirled_available": _consistent_metadata_value(rows, "symmetry_twirled_available"),
+            "symmetry_twirled_note": _consistent_metadata_value(rows, "symmetry_twirled_note"),
+            "num_symmetry_twirl_samples": _consistent_metadata_value(rows, "num_symmetry_twirl_samples"),
+            "num_state_samples_for_twirled_evaluation": _consistent_metadata_value(
+                rows,
+                "num_state_samples_for_twirled_evaluation",
+            ),
+            "training_noise_strength_counts": _consistent_metadata_value(rows, "training_noise_strength_counts"),
+            "training_noise_note": _consistent_metadata_value(rows, "training_noise_note"),
+            "symmetry_regularization_note": _consistent_metadata_value(rows, "symmetry_regularization_note"),
         }
         for metric_name in (
             "train_accuracy",
@@ -359,6 +436,10 @@ def aggregate_noisy_comparison_runs(run_rows: list[dict[str, Any]]) -> list[dict
             "classification_threshold",
             "test_equivariance_error_mean",
             "test_equivariance_error_max",
+            "symmetry_twirled_test_accuracy",
+            "symmetry_twirled_train_accuracy",
+            "symmetry_twirled_mean_abs_shift",
+            "mean_symmetry_penalty_history",
             "build_time_seconds",
             "forward_time_seconds",
             "gradient_time_seconds",
@@ -426,6 +507,26 @@ def aggregate_noisy_comparison_runs(run_rows: list[dict[str, Any]]) -> list[dict
             else float(row["coherent_overrotation_angle_std"]),
             -1 if row.get("coherent_overrotation_seed") is None else int(row["coherent_overrotation_seed"]),
             str(row.get("pair_dependent_overrotation_angles")),
+            str(row.get("noise_aware_training")),
+            str(row.get("training_noise_strengths")),
+            str(row.get("training_noise_sampling")),
+            -1 if row.get("training_noise_seed") is None else int(row["training_noise_seed"]),
+            str(row.get("symmetry_regularization")),
+            -1.0
+            if row.get("symmetry_regularization_weight") is None
+            else float(row["symmetry_regularization_weight"]),
+            -1
+            if row.get("num_symmetry_regularization_samples") is None
+            else int(row["num_symmetry_regularization_samples"]),
+            -1
+            if row.get("symmetry_regularization_frequency") is None
+            else int(row["symmetry_regularization_frequency"]),
+            -1
+            if row.get("symmetry_regularization_state_samples") is None
+            else int(row["symmetry_regularization_state_samples"]),
+            -1
+            if row.get("symmetry_regularization_seed") is None
+            else int(row["symmetry_regularization_seed"]),
         )
     )
     return summary_rows
@@ -505,6 +606,18 @@ def _run_noisy_comparison_job(
             classification_threshold=0.5,
             threshold_update=config.threshold_update,
             threshold_critical_ratio=config.threshold_critical_ratio,
+            symmetry_regularization=config.symmetry_regularization,
+            symmetry_regularization_weight=config.symmetry_regularization_weight,
+            num_symmetry_regularization_samples=config.num_symmetry_regularization_samples,
+            symmetry_regularization_frequency=config.symmetry_regularization_frequency,
+            symmetry_regularization_state_samples=config.symmetry_regularization_state_samples,
+            symmetry_regularization_seed=config.symmetry_regularization_seed,
+        )
+        training_noise_control = _build_training_noise_control(
+            config,
+            job,
+            resolved_noise_config,
+            backend,
         )
 
         (run_output_dir / "noisy_job_config.json").write_text(
@@ -533,6 +646,8 @@ def _run_noisy_comparison_job(
             experiment_name=_job_experiment_name(config, job),
             backend=backend,
             profile=run_profile,
+            training_epoch_callback=training_noise_control["epoch_callback"],
+            post_training_callback=training_noise_control["restore_callback"],
         )
 
         symmetry_diagnostic = _symmetry_diagnostic_for_run(
@@ -543,11 +658,22 @@ def _run_noisy_comparison_job(
             backend=backend,
             result=result,
         )
+        symmetry_twirled_evaluation = _symmetry_twirled_evaluation_for_run(
+            config,
+            dataset.test.states,
+            dataset.test.labels,
+            model_family=job.model_family,
+            num_qubits=job.num_qubits,
+            backend=backend,
+            result=result,
+        )
 
     runtime_summary = run_profile.summary()
     runtime_seconds = float(runtime_summary["noisy.single_run"]["total_seconds"])
     runtime_breakdown = dict(result.get("runtime_breakdown", {}))
     noise_parameters = resolved_noise_config.parameter_metadata()
+    training_noise_metadata = _training_noise_metadata(config, result, training_noise_control)
+    symmetry_regularization_metadata = _symmetry_regularization_metadata(config, result)
     run_row = {
         "job_index": int(job.index),
         "experiment_name": str(result["experiment_name"]),
@@ -593,6 +719,34 @@ def _run_noisy_comparison_job(
         "symmetry_diagnostic_note": str(symmetry_diagnostic["note"]),
         "test_equivariance_error_mean": symmetry_diagnostic["mean_error"],
         "test_equivariance_error_max": symmetry_diagnostic["max_error"],
+        "symmetry_twirled_available": bool(symmetry_twirled_evaluation["available"]),
+        "symmetry_twirled_note": str(symmetry_twirled_evaluation["note"]),
+        "symmetry_twirled_test_accuracy": symmetry_twirled_evaluation["twirled_accuracy"],
+        "symmetry_twirled_train_accuracy": None,
+        "symmetry_twirled_mean_abs_shift": symmetry_twirled_evaluation["mean_abs_twirling_shift"],
+        "num_symmetry_twirl_samples": int(config.num_symmetry_twirl_samples),
+        "num_state_samples_for_twirled_evaluation": symmetry_twirled_evaluation["num_state_samples"],
+        "noise_aware_training": bool(training_noise_metadata["noise_aware_training"]),
+        "training_noise_strengths": training_noise_metadata["training_noise_strengths"],
+        "training_noise_sampling": training_noise_metadata["training_noise_sampling"],
+        "training_noise_seed": training_noise_metadata["training_noise_seed"],
+        "training_noise_schedule": training_noise_metadata["training_noise_schedule"],
+        "training_noise_strength_counts": training_noise_metadata["training_noise_strength_counts"],
+        "training_noise_note": training_noise_metadata["training_noise_note"],
+        "symmetry_regularization": bool(symmetry_regularization_metadata["symmetry_regularization"]),
+        "symmetry_regularization_weight": symmetry_regularization_metadata["symmetry_regularization_weight"],
+        "num_symmetry_regularization_samples": symmetry_regularization_metadata[
+            "num_symmetry_regularization_samples"
+        ],
+        "symmetry_regularization_frequency": symmetry_regularization_metadata[
+            "symmetry_regularization_frequency"
+        ],
+        "symmetry_regularization_state_samples": symmetry_regularization_metadata[
+            "symmetry_regularization_state_samples"
+        ],
+        "symmetry_regularization_seed": symmetry_regularization_metadata["symmetry_regularization_seed"],
+        "mean_symmetry_penalty_history": symmetry_regularization_metadata["mean_symmetry_penalty_history"],
+        "symmetry_regularization_note": symmetry_regularization_metadata["symmetry_regularization_note"],
         "output_dir": str(run_output_dir.resolve()),
     }
     run_metadata = {
@@ -607,6 +761,9 @@ def _run_noisy_comparison_job(
         "runtime_profile": result.get("runtime_profile"),
         "runtime_breakdown": runtime_breakdown,
         "symmetry_diagnostic": symmetry_diagnostic,
+        "symmetry_twirled_evaluation": symmetry_twirled_evaluation,
+        "training_noise": training_noise_metadata,
+        "symmetry_regularization": symmetry_regularization_metadata,
         "run_summary": run_row,
     }
     run_row_path.write_text(json.dumps(_serialize_for_json(run_row), indent=2, sort_keys=True) + "\n")
@@ -622,6 +779,140 @@ def _run_noisy_comparison_job(
     return run_row
 
 
+def _build_training_noise_control(
+    config: NoisyComparisonConfig,
+    job: NoisyComparisonJob,
+    resolved_noise_config: NoiseConfig,
+    backend: object,
+) -> dict[str, Any]:
+    if not config.noise_aware_training:
+        return {
+            "schedule": [],
+            "counts": {},
+            "epoch_callback": None,
+            "restore_callback": None,
+            "note": "disabled",
+        }
+
+    if not hasattr(backend, "noise_config"):
+        return {
+            "schedule": [],
+            "counts": {},
+            "epoch_callback": None,
+            "restore_callback": None,
+            "note": "backend_does_not_expose_noise_config",
+        }
+
+    rng = np.random.default_rng(config.training_noise_seed)
+    strengths = np.asarray(config.training_noise_strengths, dtype=np.float64)
+    schedule = [float(value) for value in rng.choice(strengths, size=int(job.epochs), replace=True)]
+    counts = _noise_strength_counts(schedule)
+    if schedule:
+        backend.noise_config = _training_noise_config_from_strength(
+            config,
+            resolved_noise_config,
+            float(schedule[0]),
+        )
+
+    def epoch_callback(epoch: int, model: object) -> dict[str, Any]:
+        del model
+        strength = float(schedule[int(epoch) - 1])
+        backend.noise_config = _training_noise_config_from_strength(
+            config,
+            resolved_noise_config,
+            strength,
+        )
+        return {
+            "epoch": int(epoch),
+            "training_noise_strength": strength,
+        }
+
+    def restore_callback(model: object) -> None:
+        del model
+        backend.noise_config = resolved_noise_config
+
+    return {
+        "schedule": schedule,
+        "counts": counts,
+        "epoch_callback": epoch_callback,
+        "restore_callback": restore_callback,
+        "note": "per_epoch_noise_config_sampling",
+    }
+
+
+def _training_noise_config_from_strength(
+    config: NoisyComparisonConfig,
+    resolved_noise_config: NoiseConfig,
+    strength: float,
+) -> NoiseConfig:
+    return noise_config_from_strength(
+        config.noise_model_name,
+        float(strength),
+        coherent_overrotation_mode=config.coherent_overrotation_mode,
+        coherent_overrotation_probability=config.coherent_overrotation_probability,
+        coherent_overrotation_angle_std=config.coherent_overrotation_angle_std,
+        coherent_overrotation_seed=config.coherent_overrotation_seed,
+        noise_application_scope=resolved_noise_config.noise_application_scope,
+        noisy_qubits=resolved_noise_config.noisy_qubits,
+        single_qubit_error_profile=config.single_qubit_error_profile,
+    )
+
+
+def _training_noise_metadata(
+    config: NoisyComparisonConfig,
+    result: dict[str, Any],
+    training_noise_control: dict[str, Any],
+) -> dict[str, Any]:
+    history = result.get("history", {})
+    callback_history = history.get("epoch_callback", []) if isinstance(history, dict) else []
+    schedule = list(training_noise_control.get("schedule", []))
+    if callback_history and not schedule:
+        schedule = [float(item["training_noise_strength"]) for item in callback_history]
+    return {
+        "noise_aware_training": bool(config.noise_aware_training),
+        "training_noise_strengths": list(config.training_noise_strengths),
+        "training_noise_sampling": str(config.training_noise_sampling),
+        "training_noise_seed": config.training_noise_seed,
+        "training_noise_schedule": schedule,
+        "training_noise_strength_counts": dict(training_noise_control.get("counts", _noise_strength_counts(schedule))),
+        "training_noise_note": str(training_noise_control.get("note", "")),
+    }
+
+
+def _noise_strength_counts(schedule: list[float]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for value in schedule:
+        key = f"{float(value):.12g}"
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _symmetry_regularization_metadata(
+    config: NoisyComparisonConfig,
+    result: dict[str, Any],
+) -> dict[str, Any]:
+    history = result.get("history", {})
+    raw_penalties = history.get("symmetry_penalty", []) if isinstance(history, dict) else []
+    penalties = [
+        float(value)
+        for value in raw_penalties
+        if value is not None and np.isfinite(float(value))
+    ]
+    note = "disabled"
+    if config.symmetry_regularization:
+        note = str(history.get("symmetry_regularization_note", "finite_difference_objective_regularizer"))
+    return {
+        "symmetry_regularization": bool(config.symmetry_regularization),
+        "symmetry_regularization_weight": float(config.symmetry_regularization_weight),
+        "num_symmetry_regularization_samples": int(config.num_symmetry_regularization_samples),
+        "symmetry_regularization_frequency": int(config.symmetry_regularization_frequency),
+        "symmetry_regularization_state_samples": config.symmetry_regularization_state_samples,
+        "symmetry_regularization_seed": config.symmetry_regularization_seed,
+        "mean_symmetry_penalty_history": float(np.mean(penalties)) if penalties else None,
+        "symmetry_regularization_note": note,
+    }
+
+
 def _job_output_dir(output_path: Path, config: NoisyComparisonConfig, job: NoisyComparisonJob) -> Path:
     path = (
         output_path
@@ -635,6 +926,11 @@ def _job_output_dir(output_path: Path, config: NoisyComparisonConfig, job: Noisy
     if job.noisy_qubit_index is not None or config.noise_application_scope != "active":
         path = path / f"scope_{'selected_qubits' if job.noisy_qubit_index is not None else config.noise_application_scope}"
         path = path / f"noisy_qubit_{'none' if job.noisy_qubit_index is None else job.noisy_qubit_index}"
+    if config.noise_aware_training:
+        strengths_slug = "_".join(_noise_strength_slug(value) for value in config.training_noise_strengths)
+        path = path / "mitigation_noise_aware" / f"train_noise_{strengths_slug}"
+    if config.symmetry_regularization:
+        path = path / "mitigation_symmetry_regularized" / f"beta_{_noise_strength_slug(config.symmetry_regularization_weight)}"
     return path / f"seed_{job.seed}"
 
 
@@ -649,6 +945,10 @@ def _job_experiment_name(config: NoisyComparisonConfig, job: NoisyComparisonJob)
             f"_scope_{'selected_qubits' if job.noisy_qubit_index is not None else config.noise_application_scope}"
             f"_qubit_{'none' if job.noisy_qubit_index is None else job.noisy_qubit_index}"
         )
+    if config.noise_aware_training:
+        name += "_noise_aware_training"
+    if config.symmetry_regularization:
+        name += f"_symreg_beta_{_noise_strength_slug(config.symmetry_regularization_weight)}"
     return f"{name}_seed{job.seed}"
 
 
@@ -757,6 +1057,82 @@ def _symmetry_diagnostic_for_run(
         }
 
 
+def _symmetry_twirled_evaluation_for_run(
+    config: NoisyComparisonConfig,
+    test_states: np.ndarray,
+    test_labels: np.ndarray,
+    *,
+    model_family: str,
+    num_qubits: int,
+    backend: object,
+    result: dict[str, Any],
+) -> dict[str, Any]:
+    if not config.compute_symmetry_twirled_evaluation:
+        return {
+            "available": False,
+            "note": "disabled",
+            "twirled_accuracy": None,
+            "mean_abs_twirling_shift": None,
+            "num_state_samples": 0,
+        }
+
+    try:
+        best_parameters = np.asarray(result["history"]["best_parameters"], dtype=np.float64)
+        twirling_model = build_model(
+            ExperimentConfig(
+                model_family=model_family,
+                backend_name=config.backend_name,
+                num_qubits=num_qubits,
+                boundary=config.boundary,
+                shared_convolution_parameter=config.shared_convolution_parameter,
+                pooling_mode=config.pooling_mode,
+                pooling_keep=config.pooling_keep,
+                readout_mode=config.readout_mode,
+            ),
+            parameters=best_parameters,
+            backend=backend,
+        )
+        threshold = float(result["classification_threshold"])
+        if hasattr(twirling_model, "set_classification_threshold"):
+            twirling_model.set_classification_threshold(threshold)
+
+        if config.num_state_samples_for_twirled_evaluation is None:
+            subset_size = int(test_states.shape[0])
+        else:
+            subset_size = min(int(config.num_state_samples_for_twirled_evaluation), int(test_states.shape[0]))
+        evaluation_states = np.asarray(test_states[:subset_size], dtype=np.complex128)
+        evaluation_labels = np.asarray(test_labels[:subset_size], dtype=np.int64)
+        evaluation = evaluate_with_symmetry_twirling(
+            twirling_model,
+            evaluation_states,
+            parameters=best_parameters,
+            backend=backend,
+            labels=evaluation_labels,
+            threshold=threshold,
+            num_symmetry_samples=config.num_symmetry_twirl_samples,
+            seed=config.symmetry_twirl_seed,
+        )
+        return {
+            "available": bool(evaluation.get("symmetry_twirling_available", False)),
+            "note": str(evaluation.get("symmetry_twirling_note", "")),
+            "raw_probabilities": evaluation.get("raw_probabilities"),
+            "twirled_probabilities": evaluation.get("twirled_probabilities"),
+            "raw_accuracy": evaluation.get("raw_accuracy"),
+            "twirled_accuracy": evaluation.get("twirled_accuracy"),
+            "mean_abs_twirling_shift": evaluation.get("mean_abs_twirling_shift"),
+            "num_state_samples": evaluation.get("num_state_samples", 0),
+            "num_symmetry_samples": evaluation.get("num_symmetry_samples", config.num_symmetry_twirl_samples),
+        }
+    except Exception as exc:  # pragma: no cover - defensive path for optional evaluation
+        return {
+            "available": False,
+            "note": f"not_available: {type(exc).__name__}: {exc}",
+            "twirled_accuracy": None,
+            "mean_abs_twirling_shift": None,
+            "num_state_samples": 0,
+        }
+
+
 def _write_summary_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     fieldnames = [
         "backend_name",
@@ -782,7 +1158,24 @@ def _write_summary_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "coherent_overrotation_angle_std",
         "coherent_overrotation_seed",
         "pair_dependent_overrotation_angles",
+        "noise_aware_training",
+        "training_noise_strengths",
+        "training_noise_sampling",
+        "training_noise_seed",
+        "training_noise_strength_counts",
+        "training_noise_note",
+        "symmetry_regularization",
+        "symmetry_regularization_weight",
+        "num_symmetry_regularization_samples",
+        "symmetry_regularization_frequency",
+        "symmetry_regularization_state_samples",
+        "symmetry_regularization_seed",
+        "symmetry_regularization_note",
         "num_runs",
+        "symmetry_twirled_available",
+        "symmetry_twirled_note",
+        "num_symmetry_twirl_samples",
+        "num_state_samples_for_twirled_evaluation",
         "mean_train_accuracy",
         "variance_train_accuracy",
         "mean_test_accuracy",
@@ -797,6 +1190,14 @@ def _write_summary_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "variance_test_equivariance_error_mean",
         "mean_test_equivariance_error_max",
         "variance_test_equivariance_error_max",
+        "mean_symmetry_twirled_test_accuracy",
+        "variance_symmetry_twirled_test_accuracy",
+        "mean_symmetry_twirled_train_accuracy",
+        "variance_symmetry_twirled_train_accuracy",
+        "mean_symmetry_twirled_mean_abs_shift",
+        "variance_symmetry_twirled_mean_abs_shift",
+        "mean_mean_symmetry_penalty_history",
+        "variance_mean_symmetry_penalty_history",
         "mean_build_time_seconds",
         "variance_build_time_seconds",
         "mean_forward_time_seconds",

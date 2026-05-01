@@ -5,6 +5,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -18,7 +19,28 @@ from eqnn.experiments import (
     run_noisy_comparison,
     summarize_noisy_comparison_directory,
 )
-from eqnn.experiments.noisy_comparison import _job_output_dir
+from eqnn.experiments.noisy_comparison import _build_training_noise_control, _job_output_dir
+from eqnn.noise import noise_config_from_strength
+from eqnn.verification import evaluate_with_symmetry_twirling
+
+
+class ConstantProbabilityModel:
+    def __init__(self, probability: float = 0.75) -> None:
+        self.config = SimpleNamespace(num_qubits=1)
+        self.probability = float(probability)
+        self.threshold = 0.5
+
+    def predict(self, state: np.ndarray, parameters: np.ndarray | None = None) -> float:
+        del state, parameters
+        return self.probability
+
+    def get_classification_threshold(self) -> float:
+        return self.threshold
+
+
+class MutableNoiseBackend:
+    def __init__(self) -> None:
+        self.noise_config = noise_config_from_strength("depolarizing", 0.0)
 
 
 class NoisyComparisonTests(unittest.TestCase):
@@ -144,6 +166,121 @@ class NoisyComparisonTests(unittest.TestCase):
                 dense_test_points=11,
             )
 
+        with self.assertRaisesRegex(ValueError, "num_symmetry_twirl_samples"):
+            NoisyComparisonConfig(
+                model_families=("su2_qcnn",),
+                num_qubits_values=(4,),
+                train_sizes=(2,),
+                epochs_values=(1,),
+                random_seeds=(0,),
+                noise_strength_values=(0.0,),
+                num_symmetry_twirl_samples=0,
+                dense_test_points=11,
+            )
+
+        with self.assertRaisesRegex(ValueError, "noise_aware_training"):
+            NoisyComparisonConfig(
+                model_families=("su2_qcnn",),
+                num_qubits_values=(4,),
+                train_sizes=(2,),
+                epochs_values=(1,),
+                random_seeds=(0,),
+                noise_strength_values=(0.0,),
+                noise_aware_training=True,
+                dense_test_points=11,
+            )
+
+        with self.assertRaisesRegex(ValueError, "training_noise_strengths"):
+            NoisyComparisonConfig(
+                model_families=("su2_qcnn",),
+                num_qubits_values=(4,),
+                train_sizes=(2,),
+                epochs_values=(1,),
+                random_seeds=(0,),
+                noise_strength_values=(0.0,),
+                training_noise_strengths=(-0.01,),
+                dense_test_points=11,
+            )
+
+        with self.assertRaisesRegex(ValueError, "symmetry_regularization_weight"):
+            NoisyComparisonConfig(
+                model_families=("su2_qcnn",),
+                num_qubits_values=(4,),
+                train_sizes=(2,),
+                epochs_values=(1,),
+                random_seeds=(0,),
+                noise_strength_values=(0.0,),
+                symmetry_regularization=True,
+                symmetry_regularization_weight=-0.1,
+                dense_test_points=11,
+            )
+
+    def test_symmetry_twirled_evaluation_smoke_and_unavailable_metadata(self) -> None:
+        states = np.asarray(
+            [
+                [1.0 + 0.0j, 0.0 + 0.0j],
+                [0.0 + 0.0j, 1.0 + 0.0j],
+            ],
+            dtype=np.complex128,
+        )
+        labels = np.asarray([1, 1], dtype=np.int64)
+
+        result = evaluate_with_symmetry_twirling(
+            ConstantProbabilityModel(0.75),
+            states,
+            parameters=np.asarray([0.0]),
+            labels=labels,
+            threshold=0.5,
+            num_symmetry_samples=2,
+            seed=123,
+        )
+
+        self.assertTrue(result["symmetry_twirling_available"])
+        self.assertEqual(result["num_state_samples"], 2)
+        self.assertEqual(result["num_symmetry_samples"], 2)
+        np.testing.assert_allclose(result["raw_probabilities"], [0.75, 0.75])
+        np.testing.assert_allclose(result["twirled_probabilities"], [0.75, 0.75])
+        self.assertAlmostEqual(result["twirled_accuracy"], 1.0)
+        self.assertAlmostEqual(result["mean_abs_twirling_shift"], 0.0)
+
+        unavailable = evaluate_with_symmetry_twirling(
+            object(),
+            states,
+            labels=labels,
+            num_symmetry_samples=2,
+        )
+
+        self.assertFalse(unavailable["symmetry_twirling_available"])
+        self.assertIn("predict", unavailable["symmetry_twirling_note"])
+
+    def test_noise_aware_training_control_updates_and_restores_noise_config(self) -> None:
+        config = NoisyComparisonConfig(
+            model_families=("su2_qcnn",),
+            num_qubits_values=(4,),
+            train_sizes=(2,),
+            epochs_values=(3,),
+            random_seeds=(0,),
+            noise_strength_values=(0.08,),
+            noise_aware_training=True,
+            training_noise_strengths=(0.0, 0.01, 0.03),
+            training_noise_seed=5,
+            dense_test_points=11,
+        )
+        job = enumerate_noisy_comparison_jobs(config)[0]
+        backend = MutableNoiseBackend()
+        evaluation_noise_config = noise_config_from_strength("depolarizing", 0.08)
+
+        control = _build_training_noise_control(config, job, evaluation_noise_config, backend)
+
+        self.assertEqual(len(control["schedule"]), 3)
+        self.assertEqual(sum(control["counts"].values()), 3)
+        metadata = control["epoch_callback"](1, object())
+        self.assertEqual(metadata["epoch"], 1)
+        self.assertEqual(backend.noise_config.noise_model_name, "depolarizing")
+        self.assertAlmostEqual(backend.noise_config.primary_strength, control["schedule"][0])
+        control["restore_callback"](object())
+        self.assertAlmostEqual(backend.noise_config.primary_strength, 0.08)
+
     def test_aggregate_only_writes_summary_with_noise_fields(self) -> None:
         config = self._tiny_config()
 
@@ -226,6 +363,8 @@ class NoisyComparisonTests(unittest.TestCase):
                 self.assertEqual(row["noise_model_name"], "depolarizing")
                 self.assertIn("noise_strength", row)
                 self.assertIn("mean_test_accuracy", row)
+                self.assertIn("mean_symmetry_twirled_test_accuracy", row)
+                self.assertIn("symmetry_twirled_available", row)
                 self.assertIn("mean_build_time_seconds", row)
                 self.assertIn("mean_total_training_time_seconds", row)
 
@@ -503,6 +642,32 @@ class NoisyComparisonTests(unittest.TestCase):
                     "0.0",
                     "--dense-test-points",
                     "11",
+                    "--compute-symmetry-twirled-evaluation",
+                    "--num-symmetry-twirl-samples",
+                    "2",
+                    "--symmetry-twirl-seed",
+                    "123",
+                    "--num-state-samples-for-twirled-evaluation",
+                    "1",
+                    "--noise-aware-training",
+                    "--training-noise-strengths",
+                    "0.0",
+                    "0.01",
+                    "--training-noise-sampling",
+                    "per_epoch",
+                    "--training-noise-seed",
+                    "7",
+                    "--symmetry-regularization",
+                    "--symmetry-regularization-weight",
+                    "0.1",
+                    "--num-symmetry-regularization-samples",
+                    "1",
+                    "--symmetry-regularization-frequency",
+                    "1",
+                    "--symmetry-regularization-state-samples",
+                    "1",
+                    "--symmetry-regularization-seed",
+                    "9",
                     "--aggregate-only",
                     "--output-dir",
                     str(output_dir),
@@ -578,6 +743,18 @@ class NoisyComparisonTests(unittest.TestCase):
             random_seeds=(0,),
             noise_strength_values=(0.01,),
             dense_test_points=11,
+            compute_symmetry_twirled_evaluation=True,
+            num_symmetry_twirl_samples=1,
+            symmetry_twirl_seed=0,
+            num_state_samples_for_twirled_evaluation=1,
+            noise_aware_training=True,
+            training_noise_strengths=(0.0, 0.01),
+            training_noise_seed=0,
+            symmetry_regularization=True,
+            symmetry_regularization_weight=0.01,
+            num_symmetry_regularization_samples=1,
+            symmetry_regularization_state_samples=1,
+            symmetry_regularization_seed=0,
         )
 
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -591,6 +768,15 @@ class NoisyComparisonTests(unittest.TestCase):
             self.assertEqual(run["noise_model_name"], "depolarizing")
             self.assertTrue(np.isfinite(run["train_loss"]))
             self.assertTrue(np.isfinite(run["test_loss"]))
+            self.assertIn("symmetry_twirled_available", run)
+            self.assertIn("symmetry_twirled_test_accuracy", run)
+            self.assertEqual(run["num_state_samples_for_twirled_evaluation"], 1)
+            self.assertTrue(run["noise_aware_training"])
+            self.assertEqual(run["training_noise_strengths"], [0.0, 0.01])
+            self.assertEqual(len(run["training_noise_schedule"]), 1)
+            self.assertTrue(run["symmetry_regularization"])
+            self.assertEqual(run["symmetry_regularization_weight"], 0.01)
+            self.assertIn("symmetry_regularization_note", run)
             self.assertTrue((run_output_dir / "metrics.json").exists())
             self.assertTrue((run_output_dir / "best_parameters.npy").exists())
             self.assertTrue((run_output_dir / "noisy_job_config.json").exists())
