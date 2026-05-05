@@ -301,10 +301,23 @@ def build_parser() -> argparse.ArgumentParser:
     noisy_parser.add_argument("--symmetry-twirl-seed", type=int, default=None)
     noisy_parser.add_argument("--num-state-samples-for-twirled-evaluation", type=int, default=None)
     noisy_parser.add_argument("--noise-aware-training", action="store_true")
-    noisy_parser.add_argument("--training-noise-strengths", type=float, nargs="+", default=None)
+    noisy_parser.add_argument(
+        "--train-noise-strength-values",
+        "--training-noise-strengths",
+        dest="train_noise_strength_values",
+        type=float,
+        nargs="+",
+        default=None,
+        help=(
+            "Noise strengths sampled during noise-aware training. "
+            "The legacy --training-noise-strengths alias is preserved."
+        ),
+    )
     noisy_parser.add_argument(
         "--training-noise-sampling",
-        choices=("per_epoch",),
+        "--train-noise-sampling-mode",
+        dest="training_noise_sampling",
+        choices=("per_epoch", "per_epoch_random_choice"),
         default="per_epoch",
     )
     noisy_parser.add_argument("--training-noise-seed", type=int, default=None)
@@ -315,7 +328,7 @@ def build_parser() -> argparse.ArgumentParser:
     noisy_parser.add_argument("--symmetry-regularization-state-samples", type=int, default=None)
     noisy_parser.add_argument("--symmetry-regularization-seed", type=int, default=None)
     noisy_parser.add_argument("--profile-json", type=Path, default=None)
-    noisy_parser.add_argument("--output-dir", type=Path, required=True)
+    noisy_parser.add_argument("--output-dir", "--output-root", dest="output_dir", type=Path, required=True)
     noisy_parser.set_defaults(handler=_handle_run_noisy_comparison)
 
     noisy_summary_parser = subparsers.add_parser(
@@ -334,9 +347,30 @@ def build_parser() -> argparse.ArgumentParser:
     )
     zne_parser.add_argument("--input-dir", type=Path, required=True)
     zne_parser.add_argument("--metric", default="test_accuracy")
-    zne_parser.add_argument("--fit-type", choices=("linear", "quadratic"), default="linear")
+    zne_parser.add_argument(
+        "--fit-type",
+        choices=("linear", "quadratic", "log_margin_linear"),
+        default="linear",
+        help="Single ZNE fit type. Kept for compatibility; use --fit-types for multiple fits.",
+    )
+    zne_parser.add_argument(
+        "--fit-types",
+        choices=("linear", "quadratic", "log_margin_linear"),
+        nargs="+",
+        default=None,
+        help="One or more ZNE fit types to evaluate.",
+    )
+    zne_parser.add_argument(
+        "--fit-ranges",
+        choices=("low_noise", "full"),
+        nargs="+",
+        default=None,
+        help="One or more noise ranges to fit. Defaults to full.",
+    )
     zne_parser.add_argument("--max-noise-strength", type=float, default=None)
     zne_parser.add_argument("--noise-strengths", type=float, nargs="+", default=None)
+    zne_parser.add_argument("--low-noise-max", type=float, default=None)
+    zne_parser.add_argument("--chance-accuracy", type=float, default=0.5)
     zne_parser.add_argument("--output-json", type=Path, default=None)
     zne_parser.add_argument("--output-csv", type=Path, default=None)
     zne_parser.set_defaults(handler=_handle_summarize_zne)
@@ -627,7 +661,7 @@ def _handle_run_noisy_comparison(args: argparse.Namespace) -> int:
         num_state_samples_for_twirled_evaluation=args.num_state_samples_for_twirled_evaluation,
         noise_aware_training=bool(args.noise_aware_training),
         training_noise_strengths=(
-            tuple(args.training_noise_strengths) if args.training_noise_strengths is not None else ()
+            tuple(args.train_noise_strength_values) if args.train_noise_strength_values is not None else ()
         ),
         training_noise_sampling=args.training_noise_sampling,
         training_noise_seed=args.training_noise_seed,
@@ -678,8 +712,12 @@ def _handle_summarize_zne(args: argparse.Namespace) -> int:
         args.input_dir,
         metric_name=args.metric,
         fit_type=args.fit_type,
+        fit_types=args.fit_types,
+        fit_ranges=args.fit_ranges,
         max_noise_strength=args.max_noise_strength,
         noise_strengths=args.noise_strengths,
+        low_noise_max=args.low_noise_max,
+        chance_accuracy=args.chance_accuracy,
         output_json=args.output_json,
         output_csv=args.output_csv,
     )

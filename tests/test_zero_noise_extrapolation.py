@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import math
 import tempfile
 import unittest
 from pathlib import Path
@@ -42,6 +44,7 @@ class ZeroNoiseExtrapolationTests(unittest.TestCase):
         self.assertEqual(zne_rows[0]["zne_num_points"], 3)
         self.assertEqual(zne_rows[0]["zne_noise_strengths_used"], [0.0, 0.05, 0.1])
         self.assertAlmostEqual(zne_rows[0]["zne_residual_mse"], 0.0, places=12)
+        self.assertIn("full_range_fit_use_caution", zne_rows[0]["fit_warning"])
 
     def test_quadratic_fit_extrapolates_synthetic_rows_to_zero_noise_limit(self) -> None:
         rows = [
@@ -75,6 +78,85 @@ class ZeroNoiseExtrapolationTests(unittest.TestCase):
         self.assertAlmostEqual(zne_rows[0]["zne_estimate"], 1.0, places=6)
         self.assertEqual(zne_rows[0]["zne_noise_strengths_used"], [0.0, 0.05])
         self.assertEqual(zne_rows[0]["zne_max_noise_strength"], 0.05)
+
+    def test_low_noise_range_uses_only_low_noise_points(self) -> None:
+        rows = [
+            self._row(0.0, 1.0),
+            self._row(0.05, 0.9),
+            self._row(0.1, 0.2),
+        ]
+
+        zne_rows = fit_zero_noise_extrapolation(
+            rows,
+            metric_name="test_accuracy",
+            fit_types=("linear",),
+            fit_ranges=("low_noise",),
+            low_noise_max=0.05,
+        )
+
+        self.assertEqual(len(zne_rows), 1)
+        self.assertTrue(zne_rows[0]["fit_valid"])
+        self.assertEqual(zne_rows[0]["fit_range"], "low_noise")
+        self.assertEqual(zne_rows[0]["low_noise_max"], 0.05)
+        self.assertEqual(zne_rows[0]["num_points_total"], 3)
+        self.assertEqual(zne_rows[0]["num_points_used"], 2)
+        self.assertEqual(zne_rows[0]["noise_strengths_used"], [0.0, 0.05])
+        self.assertAlmostEqual(zne_rows[0]["zero_noise_estimate"], 1.0, places=6)
+
+    def test_log_margin_linear_recovers_sensible_zero_noise_estimate(self) -> None:
+        chance_accuracy = 0.5
+        zero_noise_accuracy = 0.9
+        slope = -2.0
+        intercept = math.log(zero_noise_accuracy - chance_accuracy)
+        rows = [
+            self._row(
+                noise_strength,
+                chance_accuracy + math.exp(intercept + slope * noise_strength),
+            )
+            for noise_strength in (0.0, 0.02, 0.05, 0.1)
+        ]
+
+        zne_rows = fit_zero_noise_extrapolation(
+            rows,
+            metric_name="test_accuracy",
+            fit_types=("log_margin_linear",),
+            fit_ranges=("low_noise",),
+            low_noise_max=0.05,
+            chance_accuracy=chance_accuracy,
+        )
+
+        self.assertEqual(len(zne_rows), 1)
+        row = zne_rows[0]
+        self.assertTrue(row["fit_valid"])
+        self.assertEqual(row["fit_target_space"], "log_accuracy_margin")
+        self.assertEqual(row["num_points_used"], 3)
+        self.assertAlmostEqual(row["zero_noise_estimate"], zero_noise_accuracy, places=6)
+        self.assertAlmostEqual(row["log_margin_intercept"], intercept, places=6)
+        self.assertAlmostEqual(row["log_margin_slope"], slope, places=6)
+        self.assertIsNotNone(row["transformed_metric_values_used"])
+
+    def test_log_margin_linear_invalid_when_no_points_above_chance(self) -> None:
+        rows = [
+            self._row(0.0, 0.5),
+            self._row(0.05, 0.49),
+            self._row(0.1, 0.5),
+        ]
+
+        zne_rows = fit_zero_noise_extrapolation(
+            rows,
+            metric_name="test_accuracy",
+            fit_types=("log_margin_linear",),
+            chance_accuracy=0.5,
+        )
+
+        self.assertEqual(len(zne_rows), 1)
+        row = zne_rows[0]
+        self.assertFalse(row["fit_valid"])
+        self.assertIsNone(row["zero_noise_estimate"])
+        self.assertEqual(row["num_points_total"], 3)
+        self.assertEqual(row["num_points_used"], 0)
+        self.assertIn("log_margin_excluded_nonpositive_margin_points", row["fit_warning"])
+        self.assertIn("insufficient_positive_margin_points", row["fit_warning"])
 
     def test_explicit_noise_strengths_filter_excludes_other_points(self) -> None:
         rows = [
@@ -113,7 +195,13 @@ class ZeroNoiseExtrapolationTests(unittest.TestCase):
             )
             run_dir.mkdir(parents=True, exist_ok=True)
             for index, noise_strength in enumerate((0.0, 0.05)):
-                current_dir = run_dir.parent.parent / f"noise_depolarizing_{str(noise_strength).replace('.', 'p')}" / "scope_active" / "noisy_qubit_none" / "seed_0"
+                current_dir = (
+                    run_dir.parent.parent
+                    / f"noise_depolarizing_{str(noise_strength).replace('.', 'p')}"
+                    / "scope_active"
+                    / "noisy_qubit_none"
+                    / "seed_0"
+                )
                 current_dir.mkdir(parents=True, exist_ok=True)
                 (current_dir / "noisy_run.json").write_text(
                     (
@@ -185,19 +273,24 @@ class ZeroNoiseExtrapolationTests(unittest.TestCase):
                     str(input_dir),
                     "--metric",
                     "test_accuracy",
-                    "--fit-type",
+                    "--fit-types",
+                    "linear",
                     "quadratic",
-                    "--max-noise-strength",
-                    "0.1",
-                    "--noise-strengths",
-                    "0.0",
+                    "log_margin_linear",
+                    "--fit-ranges",
+                    "low_noise",
+                    "full",
+                    "--low-noise-max",
                     "0.05",
-                    "0.1",
+                    "--chance-accuracy",
+                    "0.5",
                 ]
             )
 
             self.assertEqual(exit_code, 0)
             self.assertTrue((input_dir / "zne_summary.csv").exists())
+            zne_rows = json.loads((input_dir / "zne_summary.json").read_text())
+            self.assertEqual(len(zne_rows), 6)
 
 
 if __name__ == "__main__":

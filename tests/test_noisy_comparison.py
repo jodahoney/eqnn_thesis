@@ -19,7 +19,11 @@ from eqnn.experiments import (
     run_noisy_comparison,
     summarize_noisy_comparison_directory,
 )
-from eqnn.experiments.noisy_comparison import _build_training_noise_control, _job_output_dir
+from eqnn.experiments.noisy_comparison import (
+    _build_training_noise_control,
+    _job_output_dir,
+    _training_noise_metadata,
+)
 from eqnn.noise import noise_config_from_strength
 from eqnn.verification import evaluate_with_symmetry_twirling
 
@@ -128,6 +132,39 @@ class NoisyComparisonTests(unittest.TestCase):
         self.assertNotIn("scope_active", str(path))
         self.assertNotIn("noisy_qubit_none", str(path))
 
+    def test_noise_aware_job_output_dir_includes_train_noise_regime(self) -> None:
+        config_with_zero = NoisyComparisonConfig(
+            model_families=("su2_qcnn",),
+            num_qubits_values=(4,),
+            train_sizes=(2,),
+            epochs_values=(1,),
+            random_seeds=(0,),
+            noise_strength_values=(0.05,),
+            dense_test_points=11,
+            noise_aware_training=True,
+            training_noise_strengths=(0.0, 0.01, 0.03, 0.05),
+        )
+        config_without_zero = NoisyComparisonConfig(
+            model_families=("su2_qcnn",),
+            num_qubits_values=(4,),
+            train_sizes=(2,),
+            epochs_values=(1,),
+            random_seeds=(0,),
+            noise_strength_values=(0.05,),
+            dense_test_points=11,
+            noise_aware_training=True,
+            training_noise_strengths=(0.01, 0.03, 0.05),
+        )
+        job_with_zero = enumerate_noisy_comparison_jobs(config_with_zero)[0]
+        job_without_zero = enumerate_noisy_comparison_jobs(config_without_zero)[0]
+
+        path_with_zero = _job_output_dir(Path("/tmp/noisy"), config_with_zero, job_with_zero)
+        path_without_zero = _job_output_dir(Path("/tmp/noisy"), config_without_zero, job_without_zero)
+
+        self.assertNotEqual(path_with_zero, path_without_zero)
+        self.assertIn("train_noise_0_0p01_0p03_0p05", str(path_with_zero))
+        self.assertIn("train_noise_0p01_0p03_0p05", str(path_without_zero))
+
     def test_config_validation_errors_are_clear(self) -> None:
         with self.assertRaisesRegex(ValueError, "No odd qubit counts remain"):
             NoisyComparisonConfig(
@@ -178,17 +215,18 @@ class NoisyComparisonTests(unittest.TestCase):
                 dense_test_points=11,
             )
 
-        with self.assertRaisesRegex(ValueError, "noise_aware_training"):
-            NoisyComparisonConfig(
-                model_families=("su2_qcnn",),
-                num_qubits_values=(4,),
-                train_sizes=(2,),
-                epochs_values=(1,),
-                random_seeds=(0,),
-                noise_strength_values=(0.0,),
-                noise_aware_training=True,
-                dense_test_points=11,
-            )
+        default_noise_aware_config = NoisyComparisonConfig(
+            model_families=("su2_qcnn",),
+            num_qubits_values=(4,),
+            train_sizes=(2,),
+            epochs_values=(1,),
+            random_seeds=(0,),
+            noise_strength_values=(0.0, 0.03),
+            noise_aware_training=True,
+            dense_test_points=11,
+        )
+        self.assertEqual(default_noise_aware_config.training_noise_strengths, (0.0, 0.03))
+        self.assertTrue(default_noise_aware_config.training_noise_defaulted_from_evaluation_grid)
 
         with self.assertRaisesRegex(ValueError, "training_noise_strengths"):
             NoisyComparisonConfig(
@@ -288,6 +326,113 @@ class NoisyComparisonTests(unittest.TestCase):
         self.assertAlmostEqual(backend.noise_config.primary_strength, control["schedule"][0])
         control["restore_callback"](object())
         self.assertAlmostEqual(backend.noise_config.primary_strength, 0.08)
+
+    def test_training_noise_metadata_records_zero_inclusion_and_eval_default(self) -> None:
+        config_with_zero = NoisyComparisonConfig(
+            model_families=("su2_qcnn",),
+            num_qubits_values=(4,),
+            train_sizes=(2,),
+            epochs_values=(2,),
+            random_seeds=(3,),
+            noise_strength_values=(0.0, 0.03),
+            noise_aware_training=True,
+            training_noise_strengths=(0.0, 0.01),
+            dense_test_points=11,
+        )
+        job_with_zero = enumerate_noisy_comparison_jobs(config_with_zero)[0]
+        backend = MutableNoiseBackend()
+        control_with_zero = _build_training_noise_control(
+            config_with_zero,
+            job_with_zero,
+            noise_config_from_strength("depolarizing", job_with_zero.noise_strength),
+            backend,
+        )
+        metadata_with_zero = _training_noise_metadata(config_with_zero, {"history": {}}, control_with_zero)
+
+        self.assertEqual(metadata_with_zero["train_noise_strength_values"], [0.0, 0.01])
+        self.assertEqual(metadata_with_zero["train_noise_sampling_mode"], "per_epoch_random_choice")
+        self.assertTrue(metadata_with_zero["train_noise_includes_zero"])
+        self.assertFalse(metadata_with_zero["training_noise_defaulted_from_evaluation_grid"])
+        self.assertEqual(metadata_with_zero["training_noise_effective_seed"], 3)
+
+        defaulted_config = NoisyComparisonConfig(
+            model_families=("su2_qcnn",),
+            num_qubits_values=(4,),
+            train_sizes=(2,),
+            epochs_values=(2,),
+            random_seeds=(0,),
+            noise_strength_values=(0.01, 0.03),
+            noise_aware_training=True,
+            dense_test_points=11,
+        )
+        defaulted_job = enumerate_noisy_comparison_jobs(defaulted_config)[0]
+        defaulted_control = _build_training_noise_control(
+            defaulted_config,
+            defaulted_job,
+            noise_config_from_strength("depolarizing", defaulted_job.noise_strength),
+            MutableNoiseBackend(),
+        )
+        defaulted_metadata = _training_noise_metadata(defaulted_config, {"history": {}}, defaulted_control)
+
+        self.assertEqual(defaulted_metadata["train_noise_strength_values"], [0.01, 0.03])
+        self.assertFalse(defaulted_metadata["train_noise_includes_zero"])
+        self.assertTrue(defaulted_metadata["training_noise_defaulted_from_evaluation_grid"])
+        self.assertIn("defaulted_from_eval_noise_grid", defaulted_metadata["training_noise_note"])
+
+    def test_aggregation_keeps_training_noise_regimes_separate(self) -> None:
+        base_row = {
+            "job_index": 0,
+            "backend_name": "qiskit_mixed",
+            "model_family": "su2_qcnn",
+            "num_qubits": 7,
+            "train_size": 16,
+            "epochs": 20,
+            "noise_model_name": "depolarizing",
+            "noise_strength": 0.05,
+            "eval_noise_strength": 0.05,
+            "noise_aware_training": True,
+            "training_noise_sampling": "per_epoch",
+            "train_noise_sampling_mode": "per_epoch_random_choice",
+            "training_noise_seed": 11,
+            "seed": 0,
+            "train_accuracy": 0.8,
+            "test_accuracy": 0.7,
+            "train_loss": 0.4,
+            "test_loss": 0.5,
+            "classification_threshold": 0.5,
+            "runtime_seconds": 1.0,
+        }
+        rows = [
+            {
+                **base_row,
+                "training_noise_strengths": [0.0, 0.01, 0.03, 0.05],
+                "train_noise_strength_values": [0.0, 0.01, 0.03, 0.05],
+                "train_noise_includes_zero": True,
+            },
+            {
+                **base_row,
+                "job_index": 1,
+                "training_noise_strengths": [0.01, 0.03, 0.05],
+                "train_noise_strength_values": [0.01, 0.03, 0.05],
+                "train_noise_includes_zero": False,
+            },
+        ]
+
+        aggregated = aggregate_noisy_comparison_runs(rows)
+
+        self.assertEqual(len(aggregated), 2)
+        regimes = {
+            (tuple(row["train_noise_strength_values"]), row["train_noise_includes_zero"])
+            for row in aggregated
+        }
+        self.assertEqual(
+            regimes,
+            {
+                ((0.0, 0.01, 0.03, 0.05), True),
+                ((0.01, 0.03, 0.05), False),
+            },
+        )
+        self.assertTrue(all(row["eval_noise_strength"] == 0.05 for row in aggregated))
 
     def test_aggregate_only_writes_summary_with_noise_fields(self) -> None:
         config = self._tiny_config()
@@ -620,7 +765,15 @@ class NoisyComparisonTests(unittest.TestCase):
                         "epochs": 1,
                         "noise_model_name": "depolarizing",
                         "noise_strength": 0.0,
+                        "eval_noise_strength": 0.0,
                         "seed": 0,
+                        "noise_aware_training": True,
+                        "training_noise_strengths": [0.0, 0.01],
+                        "train_noise_strength_values": [0.0, 0.01],
+                        "training_noise_sampling": "per_epoch",
+                        "train_noise_sampling_mode": "per_epoch_random_choice",
+                        "train_noise_includes_zero": True,
+                        "training_noise_seed": 7,
                         "train_accuracy": 1.0,
                         "test_accuracy": 1.0,
                         "train_loss": 0.4,
@@ -660,11 +813,11 @@ class NoisyComparisonTests(unittest.TestCase):
                     "--num-state-samples-for-twirled-evaluation",
                     "1",
                     "--noise-aware-training",
-                    "--training-noise-strengths",
+                    "--train-noise-strength-values",
                     "0.0",
                     "0.01",
-                    "--training-noise-sampling",
-                    "per_epoch",
+                    "--train-noise-sampling-mode",
+                    "per_epoch_random_choice",
                     "--training-noise-seed",
                     "7",
                     "--symmetry-regularization",
@@ -686,6 +839,11 @@ class NoisyComparisonTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             self.assertTrue((output_dir / "summary.csv").exists())
+            rows = list(csv.DictReader((output_dir / "summary.csv").read_text().splitlines()))
+            self.assertEqual(rows[0]["train_noise_strength_values"], "[0.0, 0.01]")
+            self.assertEqual(rows[0]["train_noise_sampling_mode"], "per_epoch_random_choice")
+            self.assertEqual(rows[0]["train_noise_includes_zero"], "True")
+            self.assertEqual(rows[0]["eval_noise_strength"], "0.0")
 
     def test_cli_summarize_noisy_comparison_smoke(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

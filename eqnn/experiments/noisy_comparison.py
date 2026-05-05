@@ -73,6 +73,7 @@ class NoisyComparisonConfig:
     training_noise_strengths: tuple[float, ...] = ()
     training_noise_sampling: str = "per_epoch"
     training_noise_seed: int | None = None
+    training_noise_defaulted_from_evaluation_grid: bool = False
     symmetry_regularization: bool = False
     symmetry_regularization_weight: float = 0.0
     num_symmetry_regularization_samples: int = 2
@@ -151,14 +152,25 @@ class NoisyComparisonConfig:
             and self.num_state_samples_for_twirled_evaluation < 1
         ):
             raise ValueError("num_state_samples_for_twirled_evaluation must be at least 1 when provided")
-        if self.training_noise_sampling != "per_epoch":
-            raise ValueError("training_noise_sampling must be 'per_epoch'")
+        if self.training_noise_sampling not in {"per_epoch", "per_epoch_random_choice"}:
+            raise ValueError("training_noise_sampling must be 'per_epoch' or 'per_epoch_random_choice'")
+        normalized_noise_strengths = tuple(float(value) for value in self.noise_strength_values)
+        if any(not np.isfinite(value) for value in normalized_noise_strengths):
+            raise ValueError("noise_strength_values must be finite")
+        object.__setattr__(self, "noise_strength_values", normalized_noise_strengths)
         normalized_training_noise_strengths = tuple(float(value) for value in self.training_noise_strengths)
+        training_noise_defaulted = False
         if self.noise_aware_training and not normalized_training_noise_strengths:
-            raise ValueError("noise_aware_training requires at least one training_noise_strength")
+            normalized_training_noise_strengths = normalized_noise_strengths
+            training_noise_defaulted = True
         if any(not np.isfinite(value) or value < 0.0 for value in normalized_training_noise_strengths):
             raise ValueError("training_noise_strengths must contain nonnegative finite floats")
         object.__setattr__(self, "training_noise_strengths", normalized_training_noise_strengths)
+        object.__setattr__(
+            self,
+            "training_noise_defaulted_from_evaluation_grid",
+            bool(training_noise_defaulted or self.training_noise_defaulted_from_evaluation_grid),
+        )
         if self.symmetry_regularization_weight < 0.0:
             raise ValueError("symmetry_regularization_weight must be non-negative")
         if self.num_symmetry_regularization_samples < 1:
@@ -271,6 +283,7 @@ def run_noisy_comparison(
                 _serialize_for_json(
                     {
                         **asdict(config),
+                        **_config_training_noise_aliases(config),
                         "resolved_num_qubits_values": list(config.resolved_num_qubits_values),
                         "supported_noise_models": list(SUPPORTED_NOISE_MODELS),
                     }
@@ -368,8 +381,10 @@ def aggregate_noisy_comparison_runs(run_rows: list[dict[str, Any]]) -> list[dict
             row.get("coherent_overrotation_seed"),
             _hashable_key_value(row.get("pair_dependent_overrotation_angles")),
             bool(row.get("noise_aware_training", False)),
-            _hashable_key_value(row.get("training_noise_strengths")),
-            row.get("training_noise_sampling"),
+            _hashable_key_value(_row_training_noise_strength_values(row)),
+            _row_training_noise_sampling(row),
+            _row_train_noise_sampling_mode(row),
+            _row_train_noise_includes_zero(row),
             row.get("training_noise_seed"),
             bool(row.get("symmetry_regularization", False)),
             row.get("symmetry_regularization_weight"),
@@ -390,6 +405,7 @@ def aggregate_noisy_comparison_runs(run_rows: list[dict[str, Any]]) -> list[dict
             "epochs": key[4],
             "noise_model_name": key[5],
             "noise_strength": key[6],
+            "eval_noise_strength": key[6],
             "noise_primary_strength": key[7],
             "noise_application_scope": key[8],
             "noisy_qubit_index": key[9],
@@ -408,14 +424,17 @@ def aggregate_noisy_comparison_runs(run_rows: list[dict[str, Any]]) -> list[dict
             "pair_dependent_overrotation_angles": _serialize_for_json(key[22]),
             "noise_aware_training": key[23],
             "training_noise_strengths": _serialize_for_json(key[24]),
+            "train_noise_strength_values": _serialize_for_json(key[24]),
             "training_noise_sampling": key[25],
-            "training_noise_seed": key[26],
-            "symmetry_regularization": key[27],
-            "symmetry_regularization_weight": key[28],
-            "num_symmetry_regularization_samples": key[29],
-            "symmetry_regularization_frequency": key[30],
-            "symmetry_regularization_state_samples": key[31],
-            "symmetry_regularization_seed": key[32],
+            "train_noise_sampling_mode": key[26],
+            "train_noise_includes_zero": key[27],
+            "training_noise_seed": key[28],
+            "symmetry_regularization": key[29],
+            "symmetry_regularization_weight": key[30],
+            "num_symmetry_regularization_samples": key[31],
+            "symmetry_regularization_frequency": key[32],
+            "symmetry_regularization_state_samples": key[33],
+            "symmetry_regularization_seed": key[34],
             "num_runs": len(rows),
             "symmetry_twirled_available": _consistent_metadata_value(rows, "symmetry_twirled_available"),
             "symmetry_twirled_note": _consistent_metadata_value(rows, "symmetry_twirled_note"),
@@ -424,7 +443,12 @@ def aggregate_noisy_comparison_runs(run_rows: list[dict[str, Any]]) -> list[dict
                 rows,
                 "num_state_samples_for_twirled_evaluation",
             ),
+            "training_noise_effective_seed": _consistent_metadata_value(rows, "training_noise_effective_seed"),
             "training_noise_strength_counts": _consistent_metadata_value(rows, "training_noise_strength_counts"),
+            "training_noise_defaulted_from_evaluation_grid": _consistent_metadata_value(
+                rows,
+                "training_noise_defaulted_from_evaluation_grid",
+            ),
             "training_noise_note": _consistent_metadata_value(rows, "training_noise_note"),
             "symmetry_regularization_note": _consistent_metadata_value(rows, "symmetry_regularization_note"),
         }
@@ -514,6 +538,8 @@ def aggregate_noisy_comparison_runs(run_rows: list[dict[str, Any]]) -> list[dict
             str(row.get("noise_aware_training")),
             str(row.get("training_noise_strengths")),
             str(row.get("training_noise_sampling")),
+            str(row.get("train_noise_sampling_mode")),
+            str(row.get("train_noise_includes_zero")),
             -1 if row.get("training_noise_seed") is None else int(row["training_noise_seed"]),
             str(row.get("symmetry_regularization")),
             -1.0
@@ -629,7 +655,10 @@ def _run_noisy_comparison_job(
                 _serialize_for_json(
                     {
                         "job": asdict(job),
-                        "config": asdict(config),
+                        "config": {
+                            **asdict(config),
+                            **_config_training_noise_aliases(config),
+                        },
                         "resolved_num_qubits_values": list(config.resolved_num_qubits_values),
                         "noise_config": resolved_noise_config.to_dict(),
                         "noise_metadata": resolved_noise_config.to_metadata(),
@@ -688,6 +717,7 @@ def _run_noisy_comparison_job(
         "epochs": int(job.epochs),
         "noise_model_name": str(resolved_noise_config.noise_model_name),
         "noise_strength": float(job.noise_strength),
+        "eval_noise_strength": float(job.noise_strength),
         "noise_primary_strength": float(resolved_noise_config.primary_strength),
         "noise_application_scope": str(resolved_noise_config.noise_application_scope),
         "noisy_qubit_index": job.noisy_qubit_index,
@@ -736,10 +766,17 @@ def _run_noisy_comparison_job(
         "num_state_samples_for_twirled_evaluation": symmetry_twirled_evaluation["num_state_samples"],
         "noise_aware_training": bool(training_noise_metadata["noise_aware_training"]),
         "training_noise_strengths": training_noise_metadata["training_noise_strengths"],
+        "train_noise_strength_values": training_noise_metadata["train_noise_strength_values"],
         "training_noise_sampling": training_noise_metadata["training_noise_sampling"],
+        "train_noise_sampling_mode": training_noise_metadata["train_noise_sampling_mode"],
+        "train_noise_includes_zero": training_noise_metadata["train_noise_includes_zero"],
         "training_noise_seed": training_noise_metadata["training_noise_seed"],
+        "training_noise_effective_seed": training_noise_metadata["training_noise_effective_seed"],
         "training_noise_schedule": training_noise_metadata["training_noise_schedule"],
         "training_noise_strength_counts": training_noise_metadata["training_noise_strength_counts"],
+        "training_noise_defaulted_from_evaluation_grid": training_noise_metadata[
+            "training_noise_defaulted_from_evaluation_grid"
+        ],
         "training_noise_note": training_noise_metadata["training_noise_note"],
         "symmetry_regularization": bool(symmetry_regularization_metadata["symmetry_regularization"]),
         "symmetry_regularization_weight": symmetry_regularization_metadata["symmetry_regularization_weight"],
@@ -799,6 +836,8 @@ def _build_training_noise_control(
             "counts": {},
             "epoch_callback": None,
             "restore_callback": None,
+            "sampling_mode": "none",
+            "effective_seed": None,
             "note": "disabled",
         }
 
@@ -808,10 +847,13 @@ def _build_training_noise_control(
             "counts": {},
             "epoch_callback": None,
             "restore_callback": None,
+            "sampling_mode": "none",
+            "effective_seed": None,
             "note": "backend_does_not_expose_noise_config",
         }
 
-    rng = np.random.default_rng(config.training_noise_seed)
+    effective_seed = config.training_noise_seed if config.training_noise_seed is not None else int(job.seed)
+    rng = np.random.default_rng(effective_seed)
     strengths = np.asarray(config.training_noise_strengths, dtype=np.float64)
     schedule = [float(value) for value in rng.choice(strengths, size=int(job.epochs), replace=True)]
     counts = _noise_strength_counts(schedule)
@@ -839,12 +881,18 @@ def _build_training_noise_control(
         del model
         backend.noise_config = resolved_noise_config
 
+    note = "per_epoch_noise_config_sampling"
+    if config.training_noise_defaulted_from_evaluation_grid:
+        note += ";train_noise_strength_values_defaulted_from_eval_noise_grid"
+
     return {
         "schedule": schedule,
         "counts": counts,
         "epoch_callback": epoch_callback,
         "restore_callback": restore_callback,
-        "note": "per_epoch_noise_config_sampling",
+        "sampling_mode": _training_noise_sampling_mode(config),
+        "effective_seed": effective_seed,
+        "note": note,
     }
 
 
@@ -876,14 +924,32 @@ def _training_noise_metadata(
     schedule = list(training_noise_control.get("schedule", []))
     if callback_history and not schedule:
         schedule = [float(item["training_noise_strength"]) for item in callback_history]
+    train_noise_strength_values = list(config.training_noise_strengths)
+    sampling_mode = str(training_noise_control.get("sampling_mode", _training_noise_sampling_mode(config)))
     return {
         "noise_aware_training": bool(config.noise_aware_training),
-        "training_noise_strengths": list(config.training_noise_strengths),
-        "training_noise_sampling": str(config.training_noise_sampling),
+        "training_noise_strengths": train_noise_strength_values,
+        "train_noise_strength_values": train_noise_strength_values,
+        "training_noise_sampling": _legacy_training_noise_sampling(config.training_noise_sampling),
+        "train_noise_sampling_mode": sampling_mode,
+        "train_noise_includes_zero": _noise_strengths_include_zero(train_noise_strength_values),
         "training_noise_seed": config.training_noise_seed,
+        "training_noise_effective_seed": training_noise_control.get("effective_seed"),
         "training_noise_schedule": schedule,
         "training_noise_strength_counts": dict(training_noise_control.get("counts", _noise_strength_counts(schedule))),
+        "training_noise_defaulted_from_evaluation_grid": bool(
+            config.training_noise_defaulted_from_evaluation_grid
+        ),
         "training_noise_note": str(training_noise_control.get("note", "")),
+    }
+
+
+def _config_training_noise_aliases(config: NoisyComparisonConfig) -> dict[str, Any]:
+    train_noise_strength_values = list(config.training_noise_strengths)
+    return {
+        "train_noise_strength_values": train_noise_strength_values,
+        "train_noise_sampling_mode": _training_noise_sampling_mode(config),
+        "train_noise_includes_zero": _noise_strengths_include_zero(train_noise_strength_values),
     }
 
 
@@ -893,6 +959,26 @@ def _noise_strength_counts(schedule: list[float]) -> dict[str, int]:
         key = f"{float(value):.12g}"
         counts[key] = counts.get(key, 0) + 1
     return counts
+
+
+def _noise_strengths_include_zero(values: list[float] | tuple[float, ...] | None) -> bool:
+    if not values:
+        return False
+    return any(np.isclose(float(value), 0.0, rtol=0.0, atol=1e-12) for value in values)
+
+
+def _training_noise_sampling_mode(config: NoisyComparisonConfig) -> str:
+    if not config.noise_aware_training:
+        return "none"
+    if config.training_noise_sampling in {"per_epoch", "per_epoch_random_choice"}:
+        return "per_epoch_random_choice"
+    return str(config.training_noise_sampling)
+
+
+def _legacy_training_noise_sampling(value: str | None) -> str | None:
+    if value in {"per_epoch", "per_epoch_random_choice"}:
+        return "per_epoch"
+    return None if value is None else str(value)
 
 
 def _symmetry_regularization_metadata(
@@ -993,6 +1079,58 @@ def _hashable_key_value(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return tuple(_hashable_key_value(item) for item in value)
     return value
+
+
+def _row_training_noise_strength_values(row: dict[str, Any]) -> Any:
+    if not bool(row.get("noise_aware_training", False)):
+        return []
+    values = row.get("train_noise_strength_values")
+    if values is None:
+        values = row.get("training_noise_strengths")
+    return [] if values is None else values
+
+
+def _row_training_noise_sampling(row: dict[str, Any]) -> str | None:
+    if not bool(row.get("noise_aware_training", False)):
+        return None
+    sampling = row.get("training_noise_sampling")
+    if sampling is not None:
+        return _legacy_training_noise_sampling(str(sampling))
+    sampling_mode = row.get("train_noise_sampling_mode")
+    if sampling_mode == "per_epoch_random_choice":
+        return "per_epoch"
+    return None if sampling_mode is None else str(sampling_mode)
+
+
+def _row_train_noise_sampling_mode(row: dict[str, Any]) -> str:
+    sampling_mode = row.get("train_noise_sampling_mode")
+    if sampling_mode is not None:
+        return str(sampling_mode)
+    if not bool(row.get("noise_aware_training", False)):
+        return "none"
+    sampling = row.get("training_noise_sampling")
+    if sampling in {"per_epoch", "per_epoch_random_choice"}:
+        return "per_epoch_random_choice"
+    return "" if sampling is None else str(sampling)
+
+
+def _row_train_noise_includes_zero(row: dict[str, Any]) -> bool:
+    if row.get("train_noise_includes_zero") is not None:
+        value = row["train_noise_includes_zero"]
+        if isinstance(value, str):
+            return value.lower() == "true"
+        return bool(value)
+    values = _row_training_noise_strength_values(row)
+    if values is None:
+        return False
+    if isinstance(values, str):
+        try:
+            values = json.loads(values)
+        except json.JSONDecodeError:
+            values = [float(part) for part in values.strip("[]()").split(",") if part.strip()]
+    if isinstance(values, (int, float, np.generic)):
+        values = [float(values)]
+    return _noise_strengths_include_zero(list(values))
 
 
 def _consistent_metadata_value(rows: list[dict[str, Any]], key: str) -> Any:
@@ -1183,6 +1321,7 @@ def _write_summary_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "epochs",
         "noise_model_name",
         "noise_strength",
+        "eval_noise_strength",
         "noise_primary_strength",
         "noise_application_scope",
         "noisy_qubit_index",
@@ -1201,9 +1340,14 @@ def _write_summary_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "pair_dependent_overrotation_angles",
         "noise_aware_training",
         "training_noise_strengths",
+        "train_noise_strength_values",
         "training_noise_sampling",
+        "train_noise_sampling_mode",
+        "train_noise_includes_zero",
         "training_noise_seed",
+        "training_noise_effective_seed",
         "training_noise_strength_counts",
+        "training_noise_defaulted_from_evaluation_grid",
         "training_noise_note",
         "symmetry_regularization",
         "symmetry_regularization_weight",
