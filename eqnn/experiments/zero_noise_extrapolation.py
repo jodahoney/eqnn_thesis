@@ -89,6 +89,18 @@ _PREFERRED_CSV_FIELDS = (
 )
 
 
+def _numpy_rank_warning_type() -> type[Warning] | None:
+    rank_warning = getattr(np, "RankWarning", None)
+    if rank_warning is not None:
+        return rank_warning
+    try:
+        from numpy.exceptions import RankWarning
+
+        return RankWarning
+    except Exception:
+        return None
+
+
 def fit_zero_noise_extrapolation(
     rows: list[dict[str, Any]],
     *,
@@ -487,11 +499,13 @@ def _fit_polynomial(
 
     x = np.asarray([point[0] for point in points], dtype=np.float64)
     y = np.asarray([point[1] for point in points], dtype=np.float64)
+    rank_warning = _numpy_rank_warning_type()
     try:
         with warnings.catch_warnings():
-            warnings.simplefilter("error", np.RankWarning)
+            if rank_warning is not None:
+                warnings.simplefilter("error", rank_warning)
             coefficients = np.polyfit(x, y, deg=degree)
-    except (FloatingPointError, np.linalg.LinAlgError, np.RankWarning, ValueError):
+    except (FloatingPointError, np.linalg.LinAlgError, ValueError, Warning):
         return _invalid_fit_result(
             warning="fit_failed",
             fit_target_space="accuracy",
@@ -552,11 +566,13 @@ def _fit_log_margin_linear(
 
     x = np.asarray([point[0] for point in points], dtype=np.float64)
     transformed_y = np.asarray(transformed_values, dtype=np.float64)
+    rank_warning = _numpy_rank_warning_type()
     try:
         with warnings.catch_warnings():
-            warnings.simplefilter("error", np.RankWarning)
+            if rank_warning is not None:
+                warnings.simplefilter("error", rank_warning)
             coefficients = np.polyfit(x, transformed_y, deg=1)
-    except (FloatingPointError, np.linalg.LinAlgError, np.RankWarning, ValueError):
+    except (FloatingPointError, np.linalg.LinAlgError, ValueError, Warning):
         return _invalid_fit_result(
             warning="fit_failed",
             fit_target_space="log_accuracy_margin",
