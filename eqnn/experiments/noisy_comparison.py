@@ -76,6 +76,7 @@ class NoisyComparisonConfig:
     training_noise_defaulted_from_evaluation_grid: bool = False
     symmetry_regularization: bool = False
     symmetry_regularization_weight: float = 0.0
+    symmetry_regularization_beta_values: tuple[float, ...] = ()
     num_symmetry_regularization_samples: int = 2
     symmetry_regularization_frequency: int = 1
     symmetry_regularization_state_samples: int | None = None
@@ -171,8 +172,19 @@ class NoisyComparisonConfig:
             "training_noise_defaulted_from_evaluation_grid",
             bool(training_noise_defaulted or self.training_noise_defaulted_from_evaluation_grid),
         )
-        if self.symmetry_regularization_weight < 0.0:
-            raise ValueError("symmetry_regularization_weight must be non-negative")
+        normalized_symmetry_regularization_weight = float(self.symmetry_regularization_weight)
+        if (
+            not np.isfinite(normalized_symmetry_regularization_weight)
+            or normalized_symmetry_regularization_weight < 0.0
+        ):
+            raise ValueError("symmetry_regularization_weight must be a nonnegative finite float")
+        object.__setattr__(self, "symmetry_regularization_weight", normalized_symmetry_regularization_weight)
+        normalized_beta_values = tuple(float(value) for value in self.symmetry_regularization_beta_values)
+        if any(not np.isfinite(value) or value < 0.0 for value in normalized_beta_values):
+            raise ValueError("symmetry_regularization_beta_values must contain nonnegative finite floats")
+        if normalized_beta_values:
+            object.__setattr__(self, "symmetry_regularization", True)
+        object.__setattr__(self, "symmetry_regularization_beta_values", normalized_beta_values)
         if self.num_symmetry_regularization_samples < 1:
             raise ValueError("num_symmetry_regularization_samples must be at least 1")
         if self.symmetry_regularization_frequency < 1:
@@ -216,6 +228,12 @@ class NoisyComparisonConfig:
             return values
         return tuple(value for value in values if value % 2 == 1)
 
+    @property
+    def resolved_symmetry_regularization_beta_values(self) -> tuple[float, ...]:
+        if self.symmetry_regularization_beta_values:
+            return tuple(float(value) for value in self.symmetry_regularization_beta_values)
+        return (float(self.symmetry_regularization_weight),)
+
 
 @dataclass(frozen=True)
 class NoisyComparisonJob:
@@ -226,12 +244,22 @@ class NoisyComparisonJob:
     epochs: int
     noise_strength: float
     noisy_qubit_index: int | None
+    symmetry_regularization_beta: float
     seed: int
 
 
 def enumerate_noisy_comparison_jobs(config: NoisyComparisonConfig) -> list[NoisyComparisonJob]:
     jobs: list[NoisyComparisonJob] = []
-    for index, (model_family, num_qubits, train_size, epochs, noise_strength, noisy_qubit_index, seed) in enumerate(
+    for index, (
+        model_family,
+        num_qubits,
+        train_size,
+        epochs,
+        noise_strength,
+        noisy_qubit_index,
+        symmetry_regularization_beta,
+        seed,
+    ) in enumerate(
         product(
             config.model_families,
             config.resolved_num_qubits_values,
@@ -239,6 +267,7 @@ def enumerate_noisy_comparison_jobs(config: NoisyComparisonConfig) -> list[Noisy
             config.epochs_values,
             config.noise_strength_values,
             config.noisy_qubit_indices,
+            config.resolved_symmetry_regularization_beta_values,
             config.random_seeds,
         )
     ):
@@ -251,6 +280,7 @@ def enumerate_noisy_comparison_jobs(config: NoisyComparisonConfig) -> list[Noisy
                 epochs=int(epochs),
                 noise_strength=float(noise_strength),
                 noisy_qubit_index=None if noisy_qubit_index is None else int(noisy_qubit_index),
+                symmetry_regularization_beta=float(symmetry_regularization_beta),
                 seed=int(seed),
             )
         )
@@ -284,7 +314,11 @@ def run_noisy_comparison(
                     {
                         **asdict(config),
                         **_config_training_noise_aliases(config),
+                        **_config_symmetry_regularization_aliases(config),
                         "resolved_num_qubits_values": list(config.resolved_num_qubits_values),
+                        "resolved_symmetry_regularization_beta_values": list(
+                            config.resolved_symmetry_regularization_beta_values
+                        ),
                         "supported_noise_models": list(SUPPORTED_NOISE_MODELS),
                     }
                 ),
@@ -346,6 +380,9 @@ def load_completed_noisy_comparison_runs(output_dir: str | Path) -> list[dict[st
             int(row.get("epochs", 0)),
             str(row.get("noise_model_name")),
             float(row.get("noise_strength", 0.0)),
+            -1.0
+            if _row_symmetry_regularization_beta(row) is None
+            else float(_row_symmetry_regularization_beta(row)),
             -1 if row.get("noisy_qubit_index") is None else int(row["noisy_qubit_index"]),
             int(row.get("seed", 0)),
         )
@@ -380,14 +417,16 @@ def aggregate_noisy_comparison_runs(run_rows: list[dict[str, Any]]) -> list[dict
             row.get("coherent_overrotation_angle_std"),
             row.get("coherent_overrotation_seed"),
             _hashable_key_value(row.get("pair_dependent_overrotation_angles")),
-            bool(row.get("noise_aware_training", False)),
+            _row_bool(row.get("noise_aware_training", False)),
             _hashable_key_value(_row_training_noise_strength_values(row)),
             _row_training_noise_sampling(row),
             _row_train_noise_sampling_mode(row),
             _row_train_noise_includes_zero(row),
             row.get("training_noise_seed"),
-            bool(row.get("symmetry_regularization", False)),
-            row.get("symmetry_regularization_weight"),
+            _row_bool(row.get("symmetry_regularization", False)),
+            _row_symmetry_regularization_enabled(row),
+            _row_symmetry_regularization_beta(row),
+            _row_symmetry_regularization_weight(row),
             row.get("num_symmetry_regularization_samples"),
             row.get("symmetry_regularization_frequency"),
             row.get("symmetry_regularization_state_samples"),
@@ -430,11 +469,13 @@ def aggregate_noisy_comparison_runs(run_rows: list[dict[str, Any]]) -> list[dict
             "train_noise_includes_zero": key[27],
             "training_noise_seed": key[28],
             "symmetry_regularization": key[29],
-            "symmetry_regularization_weight": key[30],
-            "num_symmetry_regularization_samples": key[31],
-            "symmetry_regularization_frequency": key[32],
-            "symmetry_regularization_state_samples": key[33],
-            "symmetry_regularization_seed": key[34],
+            "symmetry_regularization_enabled": key[30],
+            "symmetry_regularization_beta": key[31],
+            "symmetry_regularization_weight": key[32],
+            "num_symmetry_regularization_samples": key[33],
+            "symmetry_regularization_frequency": key[34],
+            "symmetry_regularization_state_samples": key[35],
+            "symmetry_regularization_seed": key[36],
             "num_runs": len(rows),
             "symmetry_twirled_available": _consistent_metadata_value(rows, "symmetry_twirled_available"),
             "symmetry_twirled_note": _consistent_metadata_value(rows, "symmetry_twirled_note"),
@@ -452,6 +493,13 @@ def aggregate_noisy_comparison_runs(run_rows: list[dict[str, Any]]) -> list[dict
             "training_noise_note": _consistent_metadata_value(rows, "training_noise_note"),
             "symmetry_regularization_note": _consistent_metadata_value(rows, "symmetry_regularization_note"),
         }
+        for flat_metric_name in (
+            "mean_symmetry_penalty_history",
+            "final_symmetry_penalty",
+            "final_equivariance_error_mean",
+            "final_equivariance_error_max",
+        ):
+            summary_row[flat_metric_name] = _mean_optional_metric(rows, flat_metric_name)
         for metric_name in (
             "train_accuracy",
             "test_accuracy",
@@ -468,6 +516,9 @@ def aggregate_noisy_comparison_runs(run_rows: list[dict[str, Any]]) -> list[dict
             "symmetry_twirled_num_correct_twirled_subset",
             "symmetry_twirled_mean_abs_shift",
             "mean_symmetry_penalty_history",
+            "final_symmetry_penalty",
+            "final_equivariance_error_mean",
+            "final_equivariance_error_max",
             "build_time_seconds",
             "forward_time_seconds",
             "gradient_time_seconds",
@@ -542,6 +593,10 @@ def aggregate_noisy_comparison_runs(run_rows: list[dict[str, Any]]) -> list[dict
             str(row.get("train_noise_includes_zero")),
             -1 if row.get("training_noise_seed") is None else int(row["training_noise_seed"]),
             str(row.get("symmetry_regularization")),
+            str(row.get("symmetry_regularization_enabled")),
+            -1.0
+            if row.get("symmetry_regularization_beta") is None
+            else float(row["symmetry_regularization_beta"]),
             -1.0
             if row.get("symmetry_regularization_weight") is None
             else float(row["symmetry_regularization_weight"]),
@@ -637,7 +692,7 @@ def _run_noisy_comparison_job(
             threshold_update=config.threshold_update,
             threshold_critical_ratio=config.threshold_critical_ratio,
             symmetry_regularization=config.symmetry_regularization,
-            symmetry_regularization_weight=config.symmetry_regularization_weight,
+            symmetry_regularization_weight=job.symmetry_regularization_beta,
             num_symmetry_regularization_samples=config.num_symmetry_regularization_samples,
             symmetry_regularization_frequency=config.symmetry_regularization_frequency,
             symmetry_regularization_state_samples=config.symmetry_regularization_state_samples,
@@ -658,8 +713,12 @@ def _run_noisy_comparison_job(
                         "config": {
                             **asdict(config),
                             **_config_training_noise_aliases(config),
+                            **_config_symmetry_regularization_aliases(config),
                         },
                         "resolved_num_qubits_values": list(config.resolved_num_qubits_values),
+                        "resolved_symmetry_regularization_beta_values": list(
+                            config.resolved_symmetry_regularization_beta_values
+                        ),
                         "noise_config": resolved_noise_config.to_dict(),
                         "noise_metadata": resolved_noise_config.to_metadata(),
                         "noisy_qubit_index": job.noisy_qubit_index,
@@ -706,7 +765,11 @@ def _run_noisy_comparison_job(
     runtime_breakdown = dict(result.get("runtime_breakdown", {}))
     noise_parameters = resolved_noise_config.parameter_metadata()
     training_noise_metadata = _training_noise_metadata(config, result, training_noise_control)
-    symmetry_regularization_metadata = _symmetry_regularization_metadata(config, result)
+    symmetry_regularization_metadata = _symmetry_regularization_metadata(
+        config,
+        result,
+        beta=job.symmetry_regularization_beta,
+    )
     run_row = {
         "job_index": int(job.index),
         "experiment_name": str(result["experiment_name"]),
@@ -779,6 +842,10 @@ def _run_noisy_comparison_job(
         ],
         "training_noise_note": training_noise_metadata["training_noise_note"],
         "symmetry_regularization": bool(symmetry_regularization_metadata["symmetry_regularization"]),
+        "symmetry_regularization_enabled": bool(
+            symmetry_regularization_metadata["symmetry_regularization_enabled"]
+        ),
+        "symmetry_regularization_beta": symmetry_regularization_metadata["symmetry_regularization_beta"],
         "symmetry_regularization_weight": symmetry_regularization_metadata["symmetry_regularization_weight"],
         "num_symmetry_regularization_samples": symmetry_regularization_metadata[
             "num_symmetry_regularization_samples"
@@ -791,13 +858,21 @@ def _run_noisy_comparison_job(
         ],
         "symmetry_regularization_seed": symmetry_regularization_metadata["symmetry_regularization_seed"],
         "mean_symmetry_penalty_history": symmetry_regularization_metadata["mean_symmetry_penalty_history"],
+        "final_symmetry_penalty": symmetry_regularization_metadata["final_symmetry_penalty"],
+        "final_equivariance_error_mean": symmetry_diagnostic["mean_error"],
+        "final_equivariance_error_max": symmetry_diagnostic["max_error"],
         "symmetry_regularization_note": symmetry_regularization_metadata["symmetry_regularization_note"],
         "output_dir": str(run_output_dir.resolve()),
     }
     run_metadata = {
         "job": asdict(job),
-        "config": asdict(config),
+        "config": {
+            **asdict(config),
+            **_config_training_noise_aliases(config),
+            **_config_symmetry_regularization_aliases(config),
+        },
         "resolved_num_qubits_values": list(config.resolved_num_qubits_values),
+        "resolved_symmetry_regularization_beta_values": list(config.resolved_symmetry_regularization_beta_values),
         "noise_config": resolved_noise_config.to_dict(),
         "noise_metadata": resolved_noise_config.to_metadata(),
         "dataset_metadata": result.get("dataset_metadata"),
@@ -953,6 +1028,12 @@ def _config_training_noise_aliases(config: NoisyComparisonConfig) -> dict[str, A
     }
 
 
+def _config_symmetry_regularization_aliases(config: NoisyComparisonConfig) -> dict[str, Any]:
+    return {
+        "symmetry_regularization_beta_sweep": bool(config.symmetry_regularization_beta_values),
+    }
+
+
 def _noise_strength_counts(schedule: list[float]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for value in schedule:
@@ -981,9 +1062,22 @@ def _legacy_training_noise_sampling(value: str | None) -> str | None:
     return None if value is None else str(value)
 
 
+def _mean_optional_metric(rows: list[dict[str, Any]], key: str) -> float | None:
+    values = [
+        float(row[key])
+        for row in rows
+        if row.get(key) is not None and np.isfinite(float(row[key]))
+    ]
+    if not values:
+        return None
+    return float(np.mean(np.asarray(values, dtype=np.float64)))
+
+
 def _symmetry_regularization_metadata(
     config: NoisyComparisonConfig,
     result: dict[str, Any],
+    *,
+    beta: float,
 ) -> dict[str, Any]:
     history = result.get("history", {})
     raw_penalties = history.get("symmetry_penalty", []) if isinstance(history, dict) else []
@@ -995,14 +1089,18 @@ def _symmetry_regularization_metadata(
     note = "disabled"
     if config.symmetry_regularization:
         note = str(history.get("symmetry_regularization_note", "finite_difference_objective_regularizer"))
+    beta_value = float(beta)
     return {
         "symmetry_regularization": bool(config.symmetry_regularization),
-        "symmetry_regularization_weight": float(config.symmetry_regularization_weight),
+        "symmetry_regularization_enabled": bool(config.symmetry_regularization and beta_value > 0.0),
+        "symmetry_regularization_beta": beta_value,
+        "symmetry_regularization_weight": beta_value,
         "num_symmetry_regularization_samples": int(config.num_symmetry_regularization_samples),
         "symmetry_regularization_frequency": int(config.symmetry_regularization_frequency),
         "symmetry_regularization_state_samples": config.symmetry_regularization_state_samples,
         "symmetry_regularization_seed": config.symmetry_regularization_seed,
         "mean_symmetry_penalty_history": float(np.mean(penalties)) if penalties else None,
+        "final_symmetry_penalty": float(penalties[-1]) if penalties else None,
         "symmetry_regularization_note": note,
     }
 
@@ -1024,7 +1122,11 @@ def _job_output_dir(output_path: Path, config: NoisyComparisonConfig, job: Noisy
         strengths_slug = "_".join(_noise_strength_slug(value) for value in config.training_noise_strengths)
         path = path / "mitigation_noise_aware" / f"train_noise_{strengths_slug}"
     if config.symmetry_regularization:
-        path = path / "mitigation_symmetry_regularized" / f"beta_{_noise_strength_slug(config.symmetry_regularization_weight)}"
+        path = (
+            path
+            / "mitigation_symmetry_regularized"
+            / _symmetry_regularization_beta_path_component(config, job.symmetry_regularization_beta)
+        )
     return path / f"seed_{job.seed}"
 
 
@@ -1042,8 +1144,13 @@ def _job_experiment_name(config: NoisyComparisonConfig, job: NoisyComparisonJob)
     if config.noise_aware_training:
         name += "_noise_aware_training"
     if config.symmetry_regularization:
-        name += f"_symreg_beta_{_noise_strength_slug(config.symmetry_regularization_weight)}"
+        name += f"_symreg_beta_{_noise_strength_slug(job.symmetry_regularization_beta)}"
     return f"{name}_seed{job.seed}"
+
+
+def _symmetry_regularization_beta_path_component(config: NoisyComparisonConfig, beta: float) -> str:
+    prefix = "symreg_beta" if config.symmetry_regularization_beta_values else "beta"
+    return f"{prefix}_{_noise_strength_slug(beta)}"
 
 
 def _noise_strength_slug(value: float) -> str:
@@ -1081,8 +1188,20 @@ def _hashable_key_value(value: Any) -> Any:
     return value
 
 
+def _row_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return bool(default)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes"}:
+            return True
+        if normalized in {"false", "0", "no", ""}:
+            return False
+    return bool(value)
+
+
 def _row_training_noise_strength_values(row: dict[str, Any]) -> Any:
-    if not bool(row.get("noise_aware_training", False)):
+    if not _row_bool(row.get("noise_aware_training", False)):
         return []
     values = row.get("train_noise_strength_values")
     if values is None:
@@ -1091,7 +1210,7 @@ def _row_training_noise_strength_values(row: dict[str, Any]) -> Any:
 
 
 def _row_training_noise_sampling(row: dict[str, Any]) -> str | None:
-    if not bool(row.get("noise_aware_training", False)):
+    if not _row_bool(row.get("noise_aware_training", False)):
         return None
     sampling = row.get("training_noise_sampling")
     if sampling is not None:
@@ -1106,7 +1225,7 @@ def _row_train_noise_sampling_mode(row: dict[str, Any]) -> str:
     sampling_mode = row.get("train_noise_sampling_mode")
     if sampling_mode is not None:
         return str(sampling_mode)
-    if not bool(row.get("noise_aware_training", False)):
+    if not _row_bool(row.get("noise_aware_training", False)):
         return "none"
     sampling = row.get("training_noise_sampling")
     if sampling in {"per_epoch", "per_epoch_random_choice"}:
@@ -1116,10 +1235,7 @@ def _row_train_noise_sampling_mode(row: dict[str, Any]) -> str:
 
 def _row_train_noise_includes_zero(row: dict[str, Any]) -> bool:
     if row.get("train_noise_includes_zero") is not None:
-        value = row["train_noise_includes_zero"]
-        if isinstance(value, str):
-            return value.lower() == "true"
-        return bool(value)
+        return _row_bool(row["train_noise_includes_zero"])
     values = _row_training_noise_strength_values(row)
     if values is None:
         return False
@@ -1131,6 +1247,30 @@ def _row_train_noise_includes_zero(row: dict[str, Any]) -> bool:
     if isinstance(values, (int, float, np.generic)):
         values = [float(values)]
     return _noise_strengths_include_zero(list(values))
+
+
+def _row_symmetry_regularization_beta(row: dict[str, Any]) -> float | None:
+    beta = row.get("symmetry_regularization_beta")
+    if beta is not None:
+        return float(beta)
+    weight = row.get("symmetry_regularization_weight")
+    if weight is not None:
+        return float(weight)
+    return None
+
+
+def _row_symmetry_regularization_weight(row: dict[str, Any]) -> float | None:
+    weight = row.get("symmetry_regularization_weight")
+    if weight is not None:
+        return float(weight)
+    return _row_symmetry_regularization_beta(row)
+
+
+def _row_symmetry_regularization_enabled(row: dict[str, Any]) -> bool:
+    if row.get("symmetry_regularization_enabled") is not None:
+        return _row_bool(row["symmetry_regularization_enabled"])
+    beta = _row_symmetry_regularization_beta(row)
+    return _row_bool(row.get("symmetry_regularization", False)) and beta is not None and float(beta) > 0.0
 
 
 def _consistent_metadata_value(rows: list[dict[str, Any]], key: str) -> Any:
@@ -1350,12 +1490,18 @@ def _write_summary_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "training_noise_defaulted_from_evaluation_grid",
         "training_noise_note",
         "symmetry_regularization",
+        "symmetry_regularization_enabled",
+        "symmetry_regularization_beta",
         "symmetry_regularization_weight",
         "num_symmetry_regularization_samples",
         "symmetry_regularization_frequency",
         "symmetry_regularization_state_samples",
         "symmetry_regularization_seed",
         "symmetry_regularization_note",
+        "mean_symmetry_penalty_history",
+        "final_symmetry_penalty",
+        "final_equivariance_error_mean",
+        "final_equivariance_error_max",
         "num_runs",
         "symmetry_twirled_available",
         "symmetry_twirled_note",
@@ -1391,6 +1537,12 @@ def _write_summary_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "variance_symmetry_twirled_mean_abs_shift",
         "mean_mean_symmetry_penalty_history",
         "variance_mean_symmetry_penalty_history",
+        "mean_final_symmetry_penalty",
+        "variance_final_symmetry_penalty",
+        "mean_final_equivariance_error_mean",
+        "variance_final_equivariance_error_mean",
+        "mean_final_equivariance_error_max",
+        "variance_final_equivariance_error_max",
         "mean_build_time_seconds",
         "variance_build_time_seconds",
         "mean_forward_time_seconds",

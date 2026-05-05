@@ -22,6 +22,7 @@ from eqnn.experiments import (
 from eqnn.experiments.noisy_comparison import (
     _build_training_noise_control,
     _job_output_dir,
+    _symmetry_regularization_metadata,
     _training_noise_metadata,
 )
 from eqnn.noise import noise_config_from_strength
@@ -58,6 +59,29 @@ class NoisyComparisonTests(unittest.TestCase):
             noise_strength_values=(0.0, 0.01),
             dense_test_points=11,
         )
+
+    def _minimal_run_row(self, **overrides: object) -> dict[str, object]:
+        row: dict[str, object] = {
+            "job_index": 0,
+            "experiment_name": "synthetic_noisy",
+            "backend_name": "qiskit_mixed",
+            "model_family": "su2_qcnn",
+            "num_qubits": 4,
+            "train_size": 2,
+            "epochs": 1,
+            "noise_model_name": "depolarizing",
+            "noise_strength": 0.0,
+            "eval_noise_strength": 0.0,
+            "seed": 0,
+            "train_accuracy": 1.0,
+            "test_accuracy": 1.0,
+            "train_loss": 0.4,
+            "test_loss": 0.5,
+            "classification_threshold": 0.5,
+            "runtime_seconds": 0.1,
+        }
+        row.update(overrides)
+        return row
 
     def test_enumerate_jobs_and_indexing_are_consistent(self) -> None:
         config = NoisyComparisonConfig(
@@ -165,6 +189,88 @@ class NoisyComparisonTests(unittest.TestCase):
         self.assertIn("train_noise_0_0p01_0p03_0p05", str(path_with_zero))
         self.assertIn("train_noise_0p01_0p03_0p05", str(path_without_zero))
 
+    def test_symmetry_regularization_beta_values_expand_jobs_and_paths(self) -> None:
+        config = NoisyComparisonConfig(
+            model_families=("su2_qcnn",),
+            num_qubits_values=(4,),
+            train_sizes=(2,),
+            epochs_values=(1,),
+            random_seeds=(0,),
+            noise_strength_values=(0.0, 0.01),
+            dense_test_points=11,
+            symmetry_regularization=True,
+            symmetry_regularization_beta_values=(0.0, 0.01, 0.1),
+        )
+
+        jobs = enumerate_noisy_comparison_jobs(config)
+        paths = [_job_output_dir(Path("/tmp/noisy"), config, job) for job in jobs[:3]]
+
+        self.assertEqual(len(jobs), 6)
+        self.assertEqual([job.symmetry_regularization_beta for job in jobs[:3]], [0.0, 0.01, 0.1])
+        self.assertEqual(config.resolved_symmetry_regularization_beta_values, (0.0, 0.01, 0.1))
+        self.assertEqual(len(set(paths)), 3)
+        self.assertIn("symreg_beta_0", str(paths[0]))
+        self.assertIn("symreg_beta_0p01", str(paths[1]))
+        self.assertIn("symreg_beta_0p1", str(paths[2]))
+
+    def test_singular_symmetry_regularization_weight_preserves_legacy_beta_path(self) -> None:
+        config = NoisyComparisonConfig(
+            model_families=("su2_qcnn",),
+            num_qubits_values=(4,),
+            train_sizes=(2,),
+            epochs_values=(1,),
+            random_seeds=(0,),
+            noise_strength_values=(0.01,),
+            dense_test_points=11,
+            symmetry_regularization=True,
+            symmetry_regularization_weight=0.01,
+        )
+        job = enumerate_noisy_comparison_jobs(config)[0]
+        path = _job_output_dir(Path("/tmp/noisy"), config, job)
+
+        self.assertEqual(config.resolved_symmetry_regularization_beta_values, (0.01,))
+        self.assertEqual(job.symmetry_regularization_beta, 0.01)
+        self.assertIn("mitigation_symmetry_regularized", str(path))
+        self.assertIn("beta_0p01", str(path))
+        self.assertNotIn("symreg_beta_0p01", str(path))
+
+    def test_symmetry_regularization_metadata_records_beta_and_weight(self) -> None:
+        config = NoisyComparisonConfig(
+            model_families=("su2_qcnn",),
+            num_qubits_values=(4,),
+            train_sizes=(2,),
+            epochs_values=(1,),
+            random_seeds=(0,),
+            noise_strength_values=(0.01,),
+            dense_test_points=11,
+            symmetry_regularization=True,
+            symmetry_regularization_beta_values=(0.0, 0.1),
+        )
+
+        zero_beta_metadata = _symmetry_regularization_metadata(
+            config,
+            {
+                "history": {
+                    "symmetry_penalty": [0.03, 0.02],
+                    "symmetry_regularization_note": "configured_with_zero_weight",
+                }
+            },
+            beta=0.0,
+        )
+        positive_beta_metadata = _symmetry_regularization_metadata(
+            config,
+            {"history": {"symmetry_penalty": [0.03, 0.01]}},
+            beta=0.1,
+        )
+
+        self.assertEqual(zero_beta_metadata["symmetry_regularization_beta"], 0.0)
+        self.assertEqual(zero_beta_metadata["symmetry_regularization_weight"], 0.0)
+        self.assertFalse(zero_beta_metadata["symmetry_regularization_enabled"])
+        self.assertEqual(zero_beta_metadata["final_symmetry_penalty"], 0.02)
+        self.assertEqual(positive_beta_metadata["symmetry_regularization_beta"], 0.1)
+        self.assertEqual(positive_beta_metadata["symmetry_regularization_weight"], 0.1)
+        self.assertTrue(positive_beta_metadata["symmetry_regularization_enabled"])
+
     def test_config_validation_errors_are_clear(self) -> None:
         with self.assertRaisesRegex(ValueError, "No odd qubit counts remain"):
             NoisyComparisonConfig(
@@ -250,6 +356,19 @@ class NoisyComparisonTests(unittest.TestCase):
                 noise_strength_values=(0.0,),
                 symmetry_regularization=True,
                 symmetry_regularization_weight=-0.1,
+                dense_test_points=11,
+            )
+
+        with self.assertRaisesRegex(ValueError, "symmetry_regularization_beta_values"):
+            NoisyComparisonConfig(
+                model_families=("su2_qcnn",),
+                num_qubits_values=(4,),
+                train_sizes=(2,),
+                epochs_values=(1,),
+                random_seeds=(0,),
+                noise_strength_values=(0.0,),
+                symmetry_regularization=True,
+                symmetry_regularization_beta_values=(0.0, -0.01),
                 dense_test_points=11,
             )
 
@@ -433,6 +552,70 @@ class NoisyComparisonTests(unittest.TestCase):
             },
         )
         self.assertTrue(all(row["eval_noise_strength"] == 0.05 for row in aggregated))
+
+    def test_aggregation_keeps_symmetry_beta_values_separate_with_train_noise(self) -> None:
+        base_row = self._minimal_run_row(
+            noise_strength=0.05,
+            eval_noise_strength=0.05,
+            noise_aware_training=True,
+            training_noise_strengths=[0.01, 0.03, 0.05],
+            train_noise_strength_values=[0.01, 0.03, 0.05],
+            training_noise_sampling="per_epoch",
+            train_noise_sampling_mode="per_epoch_random_choice",
+            train_noise_includes_zero=False,
+            training_noise_seed=17,
+            symmetry_regularization=True,
+            num_symmetry_regularization_samples=2,
+            symmetry_regularization_frequency=1,
+            symmetry_regularization_state_samples=1,
+            symmetry_regularization_seed=23,
+        )
+        rows = [
+            {
+                **base_row,
+                "job_index": 0,
+                "symmetry_regularization_enabled": False,
+                "symmetry_regularization_beta": 0.0,
+                "symmetry_regularization_weight": 0.0,
+                "symmetry_regularization_note": "configured_with_zero_weight",
+                "final_symmetry_penalty": 0.02,
+            },
+            {
+                **base_row,
+                "job_index": 1,
+                "symmetry_regularization_enabled": True,
+                "symmetry_regularization_beta": 0.01,
+                "symmetry_regularization_weight": 0.01,
+                "symmetry_regularization_note": "finite_difference_objective_regularizer",
+                "final_symmetry_penalty": 0.015,
+            },
+            {
+                **base_row,
+                "job_index": 2,
+                "symmetry_regularization_enabled": True,
+                "symmetry_regularization_beta": 0.1,
+                "symmetry_regularization_weight": 0.1,
+                "symmetry_regularization_note": "finite_difference_objective_regularizer",
+                "final_symmetry_penalty": 0.01,
+            },
+        ]
+
+        aggregated = aggregate_noisy_comparison_runs(rows)
+
+        self.assertEqual(len(aggregated), 3)
+        self.assertEqual({row["symmetry_regularization_beta"] for row in aggregated}, {0.0, 0.01, 0.1})
+        self.assertEqual({row["symmetry_regularization_weight"] for row in aggregated}, {0.0, 0.01, 0.1})
+        self.assertEqual(
+            {
+                (row["symmetry_regularization_beta"], row["symmetry_regularization_enabled"])
+                for row in aggregated
+            },
+            {(0.0, False), (0.01, True), (0.1, True)},
+        )
+        self.assertTrue(all(row["train_noise_strength_values"] == [0.01, 0.03, 0.05] for row in aggregated))
+        self.assertTrue(all(row["train_noise_includes_zero"] is False for row in aggregated))
+        self.assertTrue(all(row["eval_noise_strength"] == 0.05 for row in aggregated))
+        self.assertTrue(all("final_symmetry_penalty" in row for row in aggregated))
 
     def test_aggregate_only_writes_summary_with_noise_fields(self) -> None:
         config = self._tiny_config()
@@ -844,6 +1027,49 @@ class NoisyComparisonTests(unittest.TestCase):
             self.assertEqual(rows[0]["train_noise_sampling_mode"], "per_epoch_random_choice")
             self.assertEqual(rows[0]["train_noise_includes_zero"], "True")
             self.assertEqual(rows[0]["eval_noise_strength"], "0.0")
+            config_json = json.loads((output_dir / "noisy_comparison_config.json").read_text())
+            self.assertEqual(config_json["symmetry_regularization_weight"], 0.1)
+            self.assertFalse(config_json["symmetry_regularization_beta_sweep"])
+            self.assertEqual(config_json["resolved_symmetry_regularization_beta_values"], [0.1])
+
+    def test_cli_accepts_symmetry_regularization_beta_values(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "cli_beta_values"
+            run_dir = (
+                output_dir
+                / "qiskit_mixed"
+                / "su2_qcnn"
+                / "n4"
+                / "train_size_2"
+                / "epochs_1"
+                / "noise_depolarizing_0"
+                / "seed_0"
+            )
+            run_dir.mkdir(parents=True, exist_ok=True)
+            (run_dir / "noisy_run.json").write_text(
+                json.dumps(self._minimal_run_row(output_dir=str(run_dir.resolve())), indent=2, sort_keys=True)
+                + "\n"
+            )
+
+            exit_code = cli_main(
+                [
+                    "run-noisy-comparison",
+                    "--symmetry-regularization",
+                    "--symmetry-regularization-beta-values",
+                    "0.0",
+                    "0.01",
+                    "0.1",
+                    "--aggregate-only",
+                    "--output-dir",
+                    str(output_dir),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            config_json = json.loads((output_dir / "noisy_comparison_config.json").read_text())
+            self.assertTrue(config_json["symmetry_regularization"])
+            self.assertEqual(config_json["symmetry_regularization_beta_values"], [0.0, 0.01, 0.1])
+            self.assertEqual(config_json["resolved_symmetry_regularization_beta_values"], [0.0, 0.01, 0.1])
 
     def test_cli_summarize_noisy_comparison_smoke(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -948,8 +1174,11 @@ class NoisyComparisonTests(unittest.TestCase):
             self.assertEqual(run["training_noise_strengths"], [0.0, 0.01])
             self.assertEqual(len(run["training_noise_schedule"]), 1)
             self.assertTrue(run["symmetry_regularization"])
+            self.assertTrue(run["symmetry_regularization_enabled"])
+            self.assertEqual(run["symmetry_regularization_beta"], 0.01)
             self.assertEqual(run["symmetry_regularization_weight"], 0.01)
             self.assertIn("symmetry_regularization_note", run)
+            self.assertIn("final_symmetry_penalty", run)
             self.assertTrue((run_output_dir / "metrics.json").exists())
             self.assertTrue((run_output_dir / "best_parameters.npy").exists())
             self.assertTrue((run_output_dir / "noisy_job_config.json").exists())

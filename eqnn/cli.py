@@ -322,7 +322,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     noisy_parser.add_argument("--training-noise-seed", type=int, default=None)
     noisy_parser.add_argument("--symmetry-regularization", action="store_true")
-    noisy_parser.add_argument("--symmetry-regularization-weight", type=float, default=0.0)
+    noisy_parser.add_argument(
+        "--symmetry-regularization-weight",
+        "--symmetry-regularization-beta",
+        dest="symmetry_regularization_weight",
+        type=float,
+        default=0.0,
+        help="Singular symmetry regularization beta/weight for backward-compatible runs.",
+    )
+    noisy_parser.add_argument(
+        "--symmetry-regularization-beta-values",
+        type=float,
+        nargs="+",
+        default=None,
+        help="Sweep separate symmetry regularization beta values, e.g. 0.0 0.01 0.05 0.1.",
+    )
     noisy_parser.add_argument("--num-symmetry-regularization-samples", type=int, default=2)
     noisy_parser.add_argument("--symmetry-regularization-frequency", type=int, default=1)
     noisy_parser.add_argument("--symmetry-regularization-state-samples", type=int, default=None)
@@ -665,8 +679,15 @@ def _handle_run_noisy_comparison(args: argparse.Namespace) -> int:
         ),
         training_noise_sampling=args.training_noise_sampling,
         training_noise_seed=args.training_noise_seed,
-        symmetry_regularization=bool(args.symmetry_regularization),
+        symmetry_regularization=bool(
+            args.symmetry_regularization or args.symmetry_regularization_beta_values is not None
+        ),
         symmetry_regularization_weight=args.symmetry_regularization_weight,
+        symmetry_regularization_beta_values=(
+            tuple(args.symmetry_regularization_beta_values)
+            if args.symmetry_regularization_beta_values is not None
+            else ()
+        ),
         num_symmetry_regularization_samples=args.num_symmetry_regularization_samples,
         symmetry_regularization_frequency=args.symmetry_regularization_frequency,
         symmetry_regularization_state_samples=args.symmetry_regularization_state_samples,
