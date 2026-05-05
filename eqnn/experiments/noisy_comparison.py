@@ -1086,10 +1086,13 @@ def _symmetry_regularization_metadata(
         for value in raw_penalties
         if value is not None and np.isfinite(float(value))
     ]
+    beta_value = float(beta)
     note = "disabled"
     if config.symmetry_regularization:
-        note = str(history.get("symmetry_regularization_note", "finite_difference_objective_regularizer"))
-    beta_value = float(beta)
+        if np.isclose(beta_value, 0.0, rtol=0.0, atol=1e-12):
+            note = "beta_zero_regularization_disabled"
+        else:
+            note = str(history.get("symmetry_regularization_note", "finite_difference_objective_regularizer"))
     return {
         "symmetry_regularization": bool(config.symmetry_regularization),
         "symmetry_regularization_enabled": bool(config.symmetry_regularization and beta_value > 0.0),

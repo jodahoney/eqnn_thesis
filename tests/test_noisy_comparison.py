@@ -266,10 +266,18 @@ class NoisyComparisonTests(unittest.TestCase):
         self.assertEqual(zero_beta_metadata["symmetry_regularization_beta"], 0.0)
         self.assertEqual(zero_beta_metadata["symmetry_regularization_weight"], 0.0)
         self.assertFalse(zero_beta_metadata["symmetry_regularization_enabled"])
+        self.assertEqual(
+            zero_beta_metadata["symmetry_regularization_note"],
+            "beta_zero_regularization_disabled",
+        )
         self.assertEqual(zero_beta_metadata["final_symmetry_penalty"], 0.02)
         self.assertEqual(positive_beta_metadata["symmetry_regularization_beta"], 0.1)
         self.assertEqual(positive_beta_metadata["symmetry_regularization_weight"], 0.1)
         self.assertTrue(positive_beta_metadata["symmetry_regularization_enabled"])
+        self.assertEqual(
+            positive_beta_metadata["symmetry_regularization_note"],
+            "finite_difference_objective_regularizer",
+        )
 
     def test_config_validation_errors_are_clear(self) -> None:
         with self.assertRaisesRegex(ValueError, "No odd qubit counts remain"):
@@ -577,7 +585,7 @@ class NoisyComparisonTests(unittest.TestCase):
                 "symmetry_regularization_enabled": False,
                 "symmetry_regularization_beta": 0.0,
                 "symmetry_regularization_weight": 0.0,
-                "symmetry_regularization_note": "configured_with_zero_weight",
+                "symmetry_regularization_note": "beta_zero_regularization_disabled",
                 "final_symmetry_penalty": 0.02,
             },
             {
