@@ -25,6 +25,17 @@ from eqnn.utils.timing import RuntimeProfile, timed
 from eqnn.verification import estimate_equivariance_error, evaluate_with_symmetry_twirling
 
 
+SUPPORTED_MITIGATION_METHODS = (
+    "none",
+    "noise_aware_training",
+    "symmetry_regularized",
+    "noise_aware_symmetry_regularized",
+    "symmetry_twirled",
+    "zne",
+)
+POST_PROCESSING_MITIGATION_METHODS = ("zne",)
+
+
 @dataclass(frozen=True)
 class NoisyComparisonConfig:
     model_families: tuple[str, ...] = ("su2_qcnn", "hea_qcnn")
@@ -35,6 +46,7 @@ class NoisyComparisonConfig:
     backend_name: str = "qiskit_mixed"
     noise_model_name: str = "depolarizing"
     noise_strength_values: tuple[float, ...] = (0.0, 0.001, 0.005, 0.01, 0.02, 0.05, 0.1)
+    mitigation_method: str = "auto"
     odd_qubits_only: bool = False
     coherent_overrotation_mode: str = "fixed"
     coherent_overrotation_probability: float = 1.0
@@ -42,6 +54,7 @@ class NoisyComparisonConfig:
     coherent_overrotation_seed: int | None = None
     noise_application_scope: str = "active"
     noisy_qubit_indices: tuple[int | None, ...] = (None,)
+    selected_noisy_qubit_pattern: str | None = None
     single_qubit_error_profile: tuple[float, ...] | None = None
     learning_rate: float = 5e-2
     gradient_backend: str = "finite_difference"
@@ -185,6 +198,14 @@ class NoisyComparisonConfig:
         if normalized_beta_values:
             object.__setattr__(self, "symmetry_regularization", True)
         object.__setattr__(self, "symmetry_regularization_beta_values", normalized_beta_values)
+        normalized_mitigation_method = _normalize_mitigation_method(self.mitigation_method)
+        if normalized_mitigation_method == "auto":
+            normalized_mitigation_method = _derive_mitigation_method(
+                noise_aware_training=bool(self.noise_aware_training),
+                symmetry_regularization=bool(self.symmetry_regularization),
+                compute_symmetry_twirled_evaluation=bool(self.compute_symmetry_twirled_evaluation),
+            )
+        object.__setattr__(self, "mitigation_method", normalized_mitigation_method)
         if self.num_symmetry_regularization_samples < 1:
             raise ValueError("num_symmetry_regularization_samples must be at least 1")
         if self.symmetry_regularization_frequency < 1:
@@ -248,6 +269,96 @@ class NoisyComparisonJob:
     seed: int
 
 
+@dataclass(frozen=True)
+class AllNoiseMitigationComparisonConfig:
+    model_families: tuple[str, ...] = ("su2_qcnn", "hea_qcnn")
+    num_qubits_values: tuple[int, ...] = (4, 6)
+    train_sizes: tuple[int, ...] = (4, 8, 12)
+    epochs_values: tuple[int, ...] = (10,)
+    random_seeds: tuple[int, ...] = (0, 1)
+    backend_name: str = "qiskit_mixed"
+    noise_model_names: tuple[str, ...] = (
+        "depolarizing",
+        "phase_damping",
+        "amplitude_damping",
+        "coherent_overrotation",
+    )
+    noise_strength_values: tuple[float, ...] = (0.0, 0.01, 0.03, 0.05, 0.075, 0.1)
+    mitigation_methods: tuple[str, ...] = ("none", "noise_aware_training", "symmetry_regularized")
+    odd_qubits_only: bool = False
+    coherent_overrotation_mode: str = "fixed"
+    coherent_overrotation_probability: float = 1.0
+    coherent_overrotation_angle_std: float = 0.0
+    coherent_overrotation_seed: int | None = None
+    noise_application_scope: str = "active"
+    noisy_qubit_indices: tuple[int | None, ...] = (None,)
+    selected_noisy_qubit_pattern: str | None = None
+    single_qubit_error_profile: tuple[float, ...] | None = None
+    learning_rate: float = 5e-2
+    gradient_backend: str = "finite_difference"
+    initialization_strategy: str = "noisy_current"
+    initialization_noise_scale: float = 5e-2
+    critical_ratio: float = 1.0
+    left_ratio_min: float = 0.0
+    right_ratio_max: float = 2.0
+    dense_test_points: int = 101
+    eigensolver: str = "auto"
+    compute_symmetry_diagnostics: bool = False
+    num_symmetry_samples: int = 8
+    num_state_samples_for_diagnostic: int = 8
+    num_symmetry_twirl_samples: int = 8
+    symmetry_twirl_seed: int | None = None
+    num_state_samples_for_twirled_evaluation: int | None = None
+    training_noise_strengths: tuple[float, ...] = ()
+    training_noise_sampling: str = "per_epoch"
+    training_noise_seed: int | None = None
+    symmetry_regularization_weight: float = 0.01
+    symmetry_regularization_beta_values: tuple[float, ...] = ()
+    num_symmetry_regularization_samples: int = 2
+    symmetry_regularization_frequency: int = 1
+    symmetry_regularization_state_samples: int | None = None
+    symmetry_regularization_seed: int | None = None
+
+    def __post_init__(self) -> None:
+        if not self.noise_model_names:
+            raise ValueError("noise_model_names must not be empty")
+        if not self.mitigation_methods:
+            raise ValueError("mitigation_methods must not be empty")
+        canonical_noise_model_names = tuple(
+            NoiseConfig(noise_model_name=str(name)).noise_model_name for name in self.noise_model_names
+        )
+        object.__setattr__(self, "noise_model_names", canonical_noise_model_names)
+        normalized_methods = tuple(_normalize_mitigation_method(method) for method in self.mitigation_methods)
+        if "auto" in normalized_methods:
+            raise ValueError("mitigation_methods must name concrete methods, not 'auto'")
+        object.__setattr__(self, "mitigation_methods", normalized_methods)
+        object.__setattr__(
+            self,
+            "noisy_qubit_indices",
+            tuple(None if value is None else int(value) for value in self.noisy_qubit_indices),
+        )
+        object.__setattr__(
+            self,
+            "training_noise_strengths",
+            tuple(float(value) for value in self.training_noise_strengths),
+        )
+        object.__setattr__(
+            self,
+            "symmetry_regularization_beta_values",
+            tuple(float(value) for value in self.symmetry_regularization_beta_values),
+        )
+        object.__setattr__(self, "symmetry_regularization_weight", float(self.symmetry_regularization_weight))
+
+
+@dataclass(frozen=True)
+class AllNoiseMitigationRunSpec:
+    noise_model_name: str
+    mitigation_method: str
+    config: NoisyComparisonConfig | None
+    post_processing_only: bool = False
+    note: str | None = None
+
+
 def enumerate_noisy_comparison_jobs(config: NoisyComparisonConfig) -> list[NoisyComparisonJob]:
     jobs: list[NoisyComparisonJob] = []
     for index, (
@@ -292,6 +403,210 @@ def noisy_comparison_job_from_index(config: NoisyComparisonConfig, index: int) -
     if index < 0 or index >= len(jobs):
         raise IndexError(f"Noisy comparison job index {index} is out of range for {len(jobs)} jobs")
     return jobs[index]
+
+
+def enumerate_all_noise_mitigation_configs(
+    config: AllNoiseMitigationComparisonConfig,
+) -> list[AllNoiseMitigationRunSpec]:
+    specs: list[AllNoiseMitigationRunSpec] = []
+    for noise_model_name, mitigation_method in product(config.noise_model_names, config.mitigation_methods):
+        if mitigation_method in POST_PROCESSING_MITIGATION_METHODS:
+            specs.append(
+                AllNoiseMitigationRunSpec(
+                    noise_model_name=str(noise_model_name),
+                    mitigation_method=str(mitigation_method),
+                    config=None,
+                    post_processing_only=True,
+                    note="post_processing_only;run_summarize_zne_after_base_noisy_runs",
+                )
+            )
+            continue
+        specs.append(
+            AllNoiseMitigationRunSpec(
+                noise_model_name=str(noise_model_name),
+                mitigation_method=str(mitigation_method),
+                config=_noisy_config_for_mitigation_method(config, noise_model_name, mitigation_method),
+            )
+        )
+    return specs
+
+
+def count_all_noise_mitigation_jobs(config: AllNoiseMitigationComparisonConfig) -> int:
+    total = 0
+    for spec in enumerate_all_noise_mitigation_configs(config):
+        if spec.config is not None:
+            total += len(enumerate_noisy_comparison_jobs(spec.config))
+    return total
+
+
+def run_all_noise_mitigation_comparison(
+    config: AllNoiseMitigationComparisonConfig,
+    output_dir: str | Path,
+    *,
+    force_rerun: bool = False,
+    profile: RuntimeProfile | None = None,
+) -> dict[str, Any]:
+    output_path = Path(output_dir)
+    with timed(profile, "all_noise.output.prepare_root"):
+        output_path.mkdir(parents=True, exist_ok=True)
+
+    specs = enumerate_all_noise_mitigation_configs(config)
+    with timed(profile, "all_noise.write_config"):
+        (output_path / "all_noise_mitigation_config.json").write_text(
+            json.dumps(
+                _serialize_for_json(
+                    {
+                        **asdict(config),
+                        "supported_mitigation_methods": list(SUPPORTED_MITIGATION_METHODS),
+                        "post_processing_mitigation_methods": list(POST_PROCESSING_MITIGATION_METHODS),
+                        "num_expanded_training_jobs": count_all_noise_mitigation_jobs(config),
+                        "expanded_specs": [_all_noise_spec_metadata(spec) for spec in specs],
+                    }
+                ),
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        )
+
+    post_processing_specs: list[dict[str, Any]] = []
+    for spec in specs:
+        if spec.post_processing_only or spec.config is None:
+            post_processing_specs.append(_all_noise_spec_metadata(spec))
+            continue
+        run_noisy_comparison(
+            spec.config,
+            _all_noise_spec_output_dir(output_path, spec),
+            force_rerun=force_rerun,
+            profile=profile,
+        )
+
+    if post_processing_specs:
+        (output_path / "post_processing_mitigation_methods.json").write_text(
+            json.dumps(
+                _serialize_for_json(
+                    {
+                        "methods": post_processing_specs,
+                        "zne_instruction": (
+                            "python3 -m eqnn summarize-zne "
+                            f"--input-dir {output_path} --metric test_accuracy "
+                            "--fit-types linear quadratic log_margin_linear "
+                            "--fit-ranges low_noise full"
+                        ),
+                    }
+                ),
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        )
+
+    try:
+        run_rows = load_completed_noisy_comparison_runs(output_path)
+    except ValueError:
+        run_rows = []
+    summary_rows = aggregate_noisy_comparison_runs(run_rows) if run_rows else []
+
+    with timed(profile, "all_noise.write_runs_json"):
+        (output_path / "runs.json").write_text(json.dumps(_serialize_for_json(run_rows), indent=2, sort_keys=True) + "\n")
+    with timed(profile, "all_noise.write_summary_json"):
+        (output_path / "summary.json").write_text(
+            json.dumps(_serialize_for_json(summary_rows), indent=2, sort_keys=True) + "\n"
+        )
+    with timed(profile, "all_noise.write_summary_csv"):
+        _write_summary_csv(output_path / "summary.csv", summary_rows)
+
+    return {
+        "summary": summary_rows,
+        "runs": run_rows,
+        "specs": [_all_noise_spec_metadata(spec) for spec in specs],
+        "post_processing_methods": post_processing_specs,
+    }
+
+
+def _noisy_config_for_mitigation_method(
+    config: AllNoiseMitigationComparisonConfig,
+    noise_model_name: str,
+    mitigation_method: str,
+) -> NoisyComparisonConfig:
+    noise_aware_training = mitigation_method in {
+        "noise_aware_training",
+        "noise_aware_symmetry_regularized",
+    }
+    symmetry_regularization = mitigation_method in {
+        "symmetry_regularized",
+        "noise_aware_symmetry_regularized",
+    }
+    compute_symmetry_twirled_evaluation = mitigation_method == "symmetry_twirled"
+    return NoisyComparisonConfig(
+        model_families=config.model_families,
+        num_qubits_values=config.num_qubits_values,
+        train_sizes=config.train_sizes,
+        epochs_values=config.epochs_values,
+        random_seeds=config.random_seeds,
+        backend_name=config.backend_name,
+        noise_model_name=noise_model_name,
+        noise_strength_values=config.noise_strength_values,
+        mitigation_method=mitigation_method,
+        odd_qubits_only=config.odd_qubits_only,
+        coherent_overrotation_mode=config.coherent_overrotation_mode,
+        coherent_overrotation_probability=config.coherent_overrotation_probability,
+        coherent_overrotation_angle_std=config.coherent_overrotation_angle_std,
+        coherent_overrotation_seed=config.coherent_overrotation_seed,
+        noise_application_scope=config.noise_application_scope,
+        noisy_qubit_indices=config.noisy_qubit_indices,
+        selected_noisy_qubit_pattern=config.selected_noisy_qubit_pattern,
+        single_qubit_error_profile=config.single_qubit_error_profile,
+        learning_rate=config.learning_rate,
+        gradient_backend=config.gradient_backend,
+        initialization_strategy=config.initialization_strategy,
+        initialization_noise_scale=config.initialization_noise_scale,
+        critical_ratio=config.critical_ratio,
+        left_ratio_min=config.left_ratio_min,
+        right_ratio_max=config.right_ratio_max,
+        dense_test_points=config.dense_test_points,
+        eigensolver=config.eigensolver,
+        compute_symmetry_diagnostics=config.compute_symmetry_diagnostics,
+        num_symmetry_samples=config.num_symmetry_samples,
+        num_state_samples_for_diagnostic=config.num_state_samples_for_diagnostic,
+        compute_symmetry_twirled_evaluation=compute_symmetry_twirled_evaluation,
+        num_symmetry_twirl_samples=config.num_symmetry_twirl_samples,
+        symmetry_twirl_seed=config.symmetry_twirl_seed,
+        num_state_samples_for_twirled_evaluation=config.num_state_samples_for_twirled_evaluation,
+        noise_aware_training=noise_aware_training,
+        training_noise_strengths=config.training_noise_strengths if noise_aware_training else (),
+        training_noise_sampling=config.training_noise_sampling,
+        training_noise_seed=config.training_noise_seed if noise_aware_training else None,
+        symmetry_regularization=symmetry_regularization,
+        symmetry_regularization_weight=(
+            config.symmetry_regularization_weight if symmetry_regularization else 0.0
+        ),
+        symmetry_regularization_beta_values=(
+            config.symmetry_regularization_beta_values if symmetry_regularization else ()
+        ),
+        num_symmetry_regularization_samples=config.num_symmetry_regularization_samples,
+        symmetry_regularization_frequency=config.symmetry_regularization_frequency,
+        symmetry_regularization_state_samples=config.symmetry_regularization_state_samples,
+        symmetry_regularization_seed=config.symmetry_regularization_seed,
+    )
+
+
+def _all_noise_spec_output_dir(output_path: Path, spec: AllNoiseMitigationRunSpec) -> Path:
+    return (
+        output_path
+        / f"mitigation_{_safe_path_component(spec.mitigation_method)}"
+        / f"noise_model_{_safe_path_component(spec.noise_model_name)}"
+    )
+
+
+def _all_noise_spec_metadata(spec: AllNoiseMitigationRunSpec) -> dict[str, Any]:
+    return {
+        "noise_model_name": spec.noise_model_name,
+        "mitigation_method": spec.mitigation_method,
+        "post_processing_only": bool(spec.post_processing_only),
+        "note": spec.note,
+        "num_jobs": 0 if spec.config is None else len(enumerate_noisy_comparison_jobs(spec.config)),
+    }
 
 
 def run_noisy_comparison(
@@ -431,6 +746,10 @@ def aggregate_noisy_comparison_runs(run_rows: list[dict[str, Any]]) -> list[dict
             row.get("symmetry_regularization_frequency"),
             row.get("symmetry_regularization_state_samples"),
             row.get("symmetry_regularization_seed"),
+            _row_mitigation_method(row),
+            _row_expected_symmetry_breaking(row),
+            _row_expected_symmetry_breaking_note(row),
+            _row_selected_noisy_qubit_pattern(row),
         )
         grouped.setdefault(key, []).append(row)
 
@@ -476,6 +795,10 @@ def aggregate_noisy_comparison_runs(run_rows: list[dict[str, Any]]) -> list[dict
             "symmetry_regularization_frequency": key[34],
             "symmetry_regularization_state_samples": key[35],
             "symmetry_regularization_seed": key[36],
+            "mitigation_method": key[37],
+            "expected_symmetry_breaking": key[38],
+            "expected_symmetry_breaking_note": key[39],
+            "selected_noisy_qubit_pattern": key[40],
             "num_runs": len(rows),
             "symmetry_twirled_available": _consistent_metadata_value(rows, "symmetry_twirled_available"),
             "symmetry_twirled_note": _consistent_metadata_value(rows, "symmetry_twirled_note"),
@@ -612,6 +935,10 @@ def aggregate_noisy_comparison_runs(run_rows: list[dict[str, Any]]) -> list[dict
             -1
             if row.get("symmetry_regularization_seed") is None
             else int(row["symmetry_regularization_seed"]),
+            str(row.get("mitigation_method")),
+            str(row.get("expected_symmetry_breaking")),
+            str(row.get("expected_symmetry_breaking_note")),
+            str(row.get("selected_noisy_qubit_pattern")),
         )
     )
     return summary_rows
@@ -764,6 +1091,7 @@ def _run_noisy_comparison_job(
     runtime_seconds = float(runtime_summary["noisy.single_run"]["total_seconds"])
     runtime_breakdown = dict(result.get("runtime_breakdown", {}))
     noise_parameters = resolved_noise_config.parameter_metadata()
+    mitigation_metadata = _mitigation_metadata(config, resolved_noise_config, job)
     training_noise_metadata = _training_noise_metadata(config, result, training_noise_control)
     symmetry_regularization_metadata = _symmetry_regularization_metadata(
         config,
@@ -774,6 +1102,7 @@ def _run_noisy_comparison_job(
         "job_index": int(job.index),
         "experiment_name": str(result["experiment_name"]),
         "backend_name": str(config.backend_name),
+        "mitigation_method": mitigation_metadata["mitigation_method"],
         "model_family": str(job.model_family),
         "num_qubits": int(job.num_qubits),
         "train_size": int(job.train_size),
@@ -783,8 +1112,11 @@ def _run_noisy_comparison_job(
         "eval_noise_strength": float(job.noise_strength),
         "noise_primary_strength": float(resolved_noise_config.primary_strength),
         "noise_application_scope": str(resolved_noise_config.noise_application_scope),
+        "expected_symmetry_breaking": mitigation_metadata["expected_symmetry_breaking"],
+        "expected_symmetry_breaking_note": mitigation_metadata["expected_symmetry_breaking_note"],
         "noisy_qubit_index": job.noisy_qubit_index,
         "noisy_qubits": None if resolved_noise_config.noisy_qubits is None else list(resolved_noise_config.noisy_qubits),
+        "selected_noisy_qubit_pattern": mitigation_metadata["selected_noisy_qubit_pattern"],
         "single_qubit_error_profile": (
             None
             if resolved_noise_config.single_qubit_error_profile is None
@@ -882,6 +1214,7 @@ def _run_noisy_comparison_job(
         "runtime_breakdown": runtime_breakdown,
         "symmetry_diagnostic": symmetry_diagnostic,
         "symmetry_twirled_evaluation": symmetry_twirled_evaluation,
+        "mitigation": mitigation_metadata,
         "training_noise": training_noise_metadata,
         "symmetry_regularization": symmetry_regularization_metadata,
         "run_summary": run_row,
@@ -1032,6 +1365,91 @@ def _config_symmetry_regularization_aliases(config: NoisyComparisonConfig) -> di
     return {
         "symmetry_regularization_beta_sweep": bool(config.symmetry_regularization_beta_values),
     }
+
+
+def _normalize_mitigation_method(method: str) -> str:
+    normalized = str(method).strip().lower().replace("-", "_")
+    if normalized not in (*SUPPORTED_MITIGATION_METHODS, "auto"):
+        raise ValueError(
+            "mitigation_methods must contain only supported values: "
+            f"{SUPPORTED_MITIGATION_METHODS}"
+        )
+    return normalized
+
+
+def _derive_mitigation_method(
+    *,
+    noise_aware_training: bool,
+    symmetry_regularization: bool,
+    compute_symmetry_twirled_evaluation: bool,
+) -> str:
+    if noise_aware_training and symmetry_regularization:
+        return "noise_aware_symmetry_regularized"
+    if noise_aware_training:
+        return "noise_aware_training"
+    if symmetry_regularization:
+        return "symmetry_regularized"
+    if compute_symmetry_twirled_evaluation:
+        return "symmetry_twirled"
+    return "none"
+
+
+def _mitigation_metadata(
+    config: NoisyComparisonConfig,
+    resolved_noise_config: NoiseConfig,
+    job: NoisyComparisonJob,
+) -> dict[str, Any]:
+    expected_symmetry_breaking, expected_symmetry_breaking_note = _expected_symmetry_breaking_metadata(
+        resolved_noise_config.noise_model_name,
+        resolved_noise_config.noise_application_scope,
+        resolved_noise_config.noisy_qubits,
+    )
+    return {
+        "mitigation_method": str(config.mitigation_method),
+        "expected_symmetry_breaking": expected_symmetry_breaking,
+        "expected_symmetry_breaking_note": expected_symmetry_breaking_note,
+        "selected_noisy_qubit_pattern": _selected_noisy_qubit_pattern(config, resolved_noise_config, job),
+    }
+
+
+def _expected_symmetry_breaking_metadata(
+    noise_model_name: str,
+    noise_application_scope: str | None = None,
+    noisy_qubits: tuple[int, ...] | list[int] | None = None,
+) -> tuple[str, str]:
+    if noise_application_scope == "selected_qubits" or noisy_qubits:
+        return "true", "localized_noise_breaks_site_uniformity"
+    if noise_model_name == "none":
+        return "false", "no_noise"
+    if noise_model_name == "depolarizing":
+        return "unknown", "global_depolarizing_channel_effect_unclear"
+    if noise_model_name == "phase_damping":
+        return "true", "basis_selective_dephasing"
+    if noise_model_name == "amplitude_damping":
+        return "true", "nonunital_amplitude_damping"
+    if noise_model_name == "coherent_overrotation":
+        return "unknown", "coherent_overrotation_axis_dependent"
+    return "unknown", "noise_model_not_classified"
+
+
+def _selected_noisy_qubit_pattern(
+    config: NoisyComparisonConfig,
+    resolved_noise_config: NoiseConfig,
+    job: NoisyComparisonJob,
+) -> str:
+    if config.selected_noisy_qubit_pattern is not None:
+        return str(config.selected_noisy_qubit_pattern)
+    if resolved_noise_config.noise_application_scope == "selected_qubits":
+        if job.noisy_qubit_index is not None:
+            return "single_qubit"
+        return "selected_qubits"
+    if resolved_noise_config.noise_application_scope == "all":
+        return "all"
+    return "none"
+
+
+def _safe_path_component(value: str) -> str:
+    return "".join(character if character.isalnum() or character == "_" else "_" for character in str(value))
 
 
 def _noise_strength_counts(schedule: list[float]) -> dict[str, int]:
@@ -1201,6 +1619,54 @@ def _row_bool(value: Any, default: bool = False) -> bool:
         if normalized in {"false", "0", "no", ""}:
             return False
     return bool(value)
+
+
+def _row_mitigation_method(row: dict[str, Any]) -> str:
+    method = row.get("mitigation_method")
+    if method is not None:
+        return _normalize_mitigation_method(str(method))
+    return _derive_mitigation_method(
+        noise_aware_training=_row_bool(row.get("noise_aware_training", False)),
+        symmetry_regularization=_row_bool(row.get("symmetry_regularization", False)),
+        compute_symmetry_twirled_evaluation=_row_bool(row.get("symmetry_twirled_available", False)),
+    )
+
+
+def _row_expected_symmetry_breaking(row: dict[str, Any]) -> str:
+    value = row.get("expected_symmetry_breaking")
+    if value is not None:
+        return str(value)
+    expected, _ = _expected_symmetry_breaking_metadata(
+        str(row.get("noise_model_name", "unknown")),
+        None if row.get("noise_application_scope") is None else str(row.get("noise_application_scope")),
+        row.get("noisy_qubits"),
+    )
+    return expected
+
+
+def _row_expected_symmetry_breaking_note(row: dict[str, Any]) -> str:
+    value = row.get("expected_symmetry_breaking_note")
+    if value is not None:
+        return str(value)
+    _, note = _expected_symmetry_breaking_metadata(
+        str(row.get("noise_model_name", "unknown")),
+        None if row.get("noise_application_scope") is None else str(row.get("noise_application_scope")),
+        row.get("noisy_qubits"),
+    )
+    return note
+
+
+def _row_selected_noisy_qubit_pattern(row: dict[str, Any]) -> str:
+    value = row.get("selected_noisy_qubit_pattern")
+    if value is not None:
+        return str(value)
+    if row.get("noisy_qubit_index") is not None:
+        return "single_qubit"
+    if row.get("noise_application_scope") == "all":
+        return "all"
+    if row.get("noise_application_scope") == "selected_qubits":
+        return "selected_qubits"
+    return "none"
 
 
 def _row_training_noise_strength_values(row: dict[str, Any]) -> Any:
@@ -1458,6 +1924,7 @@ def _symmetry_twirled_evaluation_for_run(
 def _write_summary_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     fieldnames = [
         "backend_name",
+        "mitigation_method",
         "model_family",
         "num_qubits",
         "train_size",
@@ -1465,10 +1932,13 @@ def _write_summary_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "noise_model_name",
         "noise_strength",
         "eval_noise_strength",
+        "expected_symmetry_breaking",
+        "expected_symmetry_breaking_note",
         "noise_primary_strength",
         "noise_application_scope",
         "noisy_qubit_index",
         "noisy_qubits",
+        "selected_noisy_qubit_pattern",
         "single_qubit_error_profile",
         "single_qubit_depolarizing_error",
         "two_qubit_depolarizing_error",
@@ -1564,12 +2034,18 @@ def _write_summary_csv(path: Path, rows: list[dict[str, Any]]) -> None:
 
 
 __all__ = [
+    "AllNoiseMitigationComparisonConfig",
+    "AllNoiseMitigationRunSpec",
     "NoisyComparisonConfig",
     "NoisyComparisonJob",
+    "SUPPORTED_MITIGATION_METHODS",
     "aggregate_noisy_comparison_runs",
+    "count_all_noise_mitigation_jobs",
+    "enumerate_all_noise_mitigation_configs",
     "enumerate_noisy_comparison_jobs",
     "load_completed_noisy_comparison_runs",
     "noise_config_from_strength",
     "noisy_comparison_job_from_index",
+    "run_all_noise_mitigation_comparison",
     "run_noisy_comparison",
 ]

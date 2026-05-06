@@ -15,9 +15,12 @@ from eqnn.experiments import (
     BenchmarkSweepConfig,
     CalibrationSweepConfig,
     ExperimentConfig,
+    AllNoiseMitigationComparisonConfig,
     NoisyComparisonConfig,
     PaperReproductionConfig,
+    SUPPORTED_MITIGATION_METHODS,
     run_backend_benchmark,
+    run_all_noise_mitigation_comparison,
     run_benchmark_sweep,
     run_calibration_sweep,
     run_noisy_comparison,
@@ -344,6 +347,131 @@ def build_parser() -> argparse.ArgumentParser:
     noisy_parser.add_argument("--profile-json", type=Path, default=None)
     noisy_parser.add_argument("--output-dir", "--output-root", dest="output_dir", type=Path, required=True)
     noisy_parser.set_defaults(handler=_handle_run_noisy_comparison)
+
+    all_noise_parser = subparsers.add_parser(
+        "run-all-noise-mitigation-comparison",
+        help="Run comparable noisy mitigation sweeps across multiple noise models.",
+    )
+    all_noise_parser.add_argument(
+        "--model-families",
+        nargs="+",
+        choices=("su2_qcnn", "hea_qcnn", "baseline_qcnn"),
+        default=("su2_qcnn", "hea_qcnn"),
+    )
+    all_noise_parser.add_argument("--num-qubits-values", type=int, nargs="+", default=(4, 6))
+    all_noise_parser.add_argument("--train-sizes", type=int, nargs="+", default=(4, 8, 12))
+    all_noise_parser.add_argument("--epochs-values", type=int, nargs="+", default=(10,))
+    all_noise_parser.add_argument("--random-seeds", type=int, nargs="+", default=(0, 1))
+    all_noise_parser.add_argument("--backend-name", choices=("qiskit_mixed",), default="qiskit_mixed")
+    all_noise_parser.add_argument(
+        "--noise-model-names",
+        nargs="+",
+        choices=("none", "depolarizing", "amplitude_damping", "phase_damping", "dephasing", "coherent_overrotation"),
+        default=("depolarizing", "phase_damping", "amplitude_damping", "coherent_overrotation"),
+    )
+    all_noise_parser.add_argument(
+        "--noise-strength-values",
+        type=float,
+        nargs="+",
+        default=(0.0, 0.01, 0.03, 0.05, 0.075, 0.1),
+    )
+    all_noise_parser.add_argument(
+        "--mitigation-methods",
+        nargs="+",
+        choices=SUPPORTED_MITIGATION_METHODS,
+        default=("none", "noise_aware_training", "symmetry_regularized"),
+    )
+    all_noise_parser.add_argument("--odd-qubits-only", action="store_true")
+    all_noise_parser.add_argument(
+        "--coherent-overrotation-mode",
+        choices=("fixed", "stochastic", "random_angle", "pair_dependent"),
+        default="fixed",
+    )
+    all_noise_parser.add_argument("--coherent-overrotation-probability", type=float, default=1.0)
+    all_noise_parser.add_argument("--coherent-overrotation-angle-std", type=float, default=0.0)
+    all_noise_parser.add_argument("--coherent-overrotation-seed", type=int, default=None)
+    all_noise_parser.add_argument(
+        "--noise-application-scope",
+        choices=("active", "all", "selected_qubits"),
+        default="active",
+    )
+    all_noise_parser.add_argument(
+        "--noisy-qubit-indices",
+        type=_parse_noisy_qubit_index,
+        nargs="+",
+        default=None,
+        help="Optional noisy-qubit sweep. Use 'none' for the unlocalized baseline.",
+    )
+    all_noise_parser.add_argument(
+        "--single-qubit-error-profile",
+        type=float,
+        nargs="+",
+        default=None,
+    )
+    all_noise_parser.add_argument("--learning-rate", type=float, default=5e-2)
+    all_noise_parser.add_argument(
+        "--gradient-backend",
+        choices=("auto", "exact", "finite_difference"),
+        default="finite_difference",
+    )
+    all_noise_parser.add_argument(
+        "--initialization-strategy",
+        choices=("current", "noisy_current"),
+        default="noisy_current",
+    )
+    all_noise_parser.add_argument("--initialization-noise-scale", type=float, default=5e-2)
+    all_noise_parser.add_argument("--critical-ratio", type=float, default=1.0)
+    all_noise_parser.add_argument("--left-ratio-min", type=float, default=0.0)
+    all_noise_parser.add_argument("--right-ratio-max", type=float, default=2.0)
+    all_noise_parser.add_argument("--dense-test-points", type=int, default=101)
+    all_noise_parser.add_argument(
+        "--eigensolver",
+        choices=("auto", "dense", "sparse"),
+        default="auto",
+    )
+    all_noise_parser.add_argument("--force-rerun", action="store_true")
+    all_noise_parser.add_argument("--compute-symmetry-diagnostics", action="store_true")
+    all_noise_parser.add_argument("--num-symmetry-samples", type=int, default=8)
+    all_noise_parser.add_argument("--num-state-samples-for-diagnostic", type=int, default=8)
+    all_noise_parser.add_argument("--num-symmetry-twirl-samples", type=int, default=8)
+    all_noise_parser.add_argument("--symmetry-twirl-seed", type=int, default=None)
+    all_noise_parser.add_argument("--num-state-samples-for-twirled-evaluation", type=int, default=None)
+    all_noise_parser.add_argument(
+        "--train-noise-strength-values",
+        "--training-noise-strengths",
+        dest="train_noise_strength_values",
+        type=float,
+        nargs="+",
+        default=None,
+    )
+    all_noise_parser.add_argument(
+        "--training-noise-sampling",
+        "--train-noise-sampling-mode",
+        dest="training_noise_sampling",
+        choices=("per_epoch", "per_epoch_random_choice"),
+        default="per_epoch",
+    )
+    all_noise_parser.add_argument("--training-noise-seed", type=int, default=None)
+    all_noise_parser.add_argument(
+        "--symmetry-regularization-weight",
+        "--symmetry-regularization-beta",
+        dest="symmetry_regularization_weight",
+        type=float,
+        default=0.01,
+    )
+    all_noise_parser.add_argument(
+        "--symmetry-regularization-beta-values",
+        type=float,
+        nargs="+",
+        default=None,
+    )
+    all_noise_parser.add_argument("--num-symmetry-regularization-samples", type=int, default=2)
+    all_noise_parser.add_argument("--symmetry-regularization-frequency", type=int, default=1)
+    all_noise_parser.add_argument("--symmetry-regularization-state-samples", type=int, default=None)
+    all_noise_parser.add_argument("--symmetry-regularization-seed", type=int, default=None)
+    all_noise_parser.add_argument("--profile-json", type=Path, default=None)
+    all_noise_parser.add_argument("--output-dir", "--output-root", dest="output_dir", type=Path, required=True)
+    all_noise_parser.set_defaults(handler=_handle_run_all_noise_mitigation_comparison)
 
     noisy_summary_parser = subparsers.add_parser(
         "summarize-noisy-comparison",
@@ -716,6 +844,82 @@ def _handle_run_noisy_comparison(args: argparse.Namespace) -> int:
     return 0
 
 
+def _handle_run_all_noise_mitigation_comparison(args: argparse.Namespace) -> int:
+    profile = RuntimeProfile()
+    noisy_qubit_indices = (
+        (None,)
+        if args.noisy_qubit_indices is None
+        else tuple(args.noisy_qubit_indices)
+    )
+    config = AllNoiseMitigationComparisonConfig(
+        model_families=tuple(args.model_families),
+        num_qubits_values=tuple(args.num_qubits_values),
+        train_sizes=tuple(args.train_sizes),
+        epochs_values=tuple(args.epochs_values),
+        random_seeds=tuple(args.random_seeds),
+        backend_name=args.backend_name,
+        noise_model_names=tuple(args.noise_model_names),
+        noise_strength_values=tuple(args.noise_strength_values),
+        mitigation_methods=tuple(args.mitigation_methods),
+        odd_qubits_only=bool(args.odd_qubits_only),
+        coherent_overrotation_mode=args.coherent_overrotation_mode,
+        coherent_overrotation_probability=args.coherent_overrotation_probability,
+        coherent_overrotation_angle_std=args.coherent_overrotation_angle_std,
+        coherent_overrotation_seed=args.coherent_overrotation_seed,
+        noise_application_scope=args.noise_application_scope,
+        noisy_qubit_indices=noisy_qubit_indices,
+        single_qubit_error_profile=(
+            None if args.single_qubit_error_profile is None else tuple(args.single_qubit_error_profile)
+        ),
+        learning_rate=args.learning_rate,
+        gradient_backend=args.gradient_backend,
+        initialization_strategy=args.initialization_strategy,
+        initialization_noise_scale=args.initialization_noise_scale,
+        critical_ratio=args.critical_ratio,
+        left_ratio_min=args.left_ratio_min,
+        right_ratio_max=args.right_ratio_max,
+        dense_test_points=args.dense_test_points,
+        eigensolver=args.eigensolver,
+        compute_symmetry_diagnostics=bool(args.compute_symmetry_diagnostics),
+        num_symmetry_samples=args.num_symmetry_samples,
+        num_state_samples_for_diagnostic=args.num_state_samples_for_diagnostic,
+        num_symmetry_twirl_samples=args.num_symmetry_twirl_samples,
+        symmetry_twirl_seed=args.symmetry_twirl_seed,
+        num_state_samples_for_twirled_evaluation=args.num_state_samples_for_twirled_evaluation,
+        training_noise_strengths=(
+            tuple(args.train_noise_strength_values) if args.train_noise_strength_values is not None else ()
+        ),
+        training_noise_sampling=args.training_noise_sampling,
+        training_noise_seed=args.training_noise_seed,
+        symmetry_regularization_weight=args.symmetry_regularization_weight,
+        symmetry_regularization_beta_values=(
+            tuple(args.symmetry_regularization_beta_values)
+            if args.symmetry_regularization_beta_values is not None
+            else ()
+        ),
+        num_symmetry_regularization_samples=args.num_symmetry_regularization_samples,
+        symmetry_regularization_frequency=args.symmetry_regularization_frequency,
+        symmetry_regularization_state_samples=args.symmetry_regularization_state_samples,
+        symmetry_regularization_seed=args.symmetry_regularization_seed,
+    )
+    results = run_all_noise_mitigation_comparison(
+        config,
+        args.output_dir,
+        force_rerun=args.force_rerun,
+        profile=profile,
+    )
+
+    if args.profile_json is not None:
+        args.profile_json.parent.mkdir(parents=True, exist_ok=True)
+        args.profile_json.write_text(json.dumps(profile.summary(), indent=2, sort_keys=True) + "\n")
+
+    print(f"Aggregated {len(results['runs'])} all-noise mitigation runs")
+    if results["post_processing_methods"]:
+        print(f"Post-processing-only methods recorded: {len(results['post_processing_methods'])}")
+    print(f"Summary written to {(args.output_dir / 'summary.csv').resolve()}")
+    return 0
+
+
 def _handle_summarize_noisy_comparison(args: argparse.Namespace) -> int:
     result = summarize_noisy_comparison_directory(
         args.input_dir,
@@ -960,6 +1164,12 @@ def _training_config_from_args(args: argparse.Namespace) -> TrainingConfig:
         threshold_update=args.threshold_update,
         threshold_critical_ratio=args.threshold_critical_ratio,
     )
+
+
+def _parse_noisy_qubit_index(value: str) -> int | None:
+    if str(value).strip().lower() in {"none", "null"}:
+        return None
+    return int(value)
 
 
 def _load_or_generate_dataset_from_args(

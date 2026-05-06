@@ -10,10 +10,13 @@ from types import SimpleNamespace
 import numpy as np
 
 from eqnn.backends import QISKIT_AVAILABLE
-from eqnn.cli import main as cli_main
+from eqnn.cli import build_parser, main as cli_main
 from eqnn.experiments import (
+    AllNoiseMitigationComparisonConfig,
     NoisyComparisonConfig,
     aggregate_noisy_comparison_runs,
+    count_all_noise_mitigation_jobs,
+    enumerate_all_noise_mitigation_configs,
     enumerate_noisy_comparison_jobs,
     noisy_comparison_job_from_index,
     run_noisy_comparison,
@@ -21,7 +24,9 @@ from eqnn.experiments import (
 )
 from eqnn.experiments.noisy_comparison import (
     _build_training_noise_control,
+    _expected_symmetry_breaking_metadata,
     _job_output_dir,
+    _mitigation_metadata,
     _symmetry_regularization_metadata,
     _training_noise_metadata,
 )
@@ -139,6 +144,110 @@ class NoisyComparisonTests(unittest.TestCase):
         self.assertEqual(len(jobs), 3)
         self.assertEqual([job.noisy_qubit_index for job in jobs], [None, 0, 2])
         self.assertEqual(config.noise_model_name, "coherent_overrotation")
+
+    def test_all_noise_cli_help_and_multi_value_parsing(self) -> None:
+        parser = build_parser()
+
+        help_text = parser.format_help()
+        args = parser.parse_args(
+            [
+                "run-all-noise-mitigation-comparison",
+                "--noise-model-names",
+                "depolarizing",
+                "phase_damping",
+                "--mitigation-methods",
+                "none",
+                "symmetry_regularized",
+                "--noisy-qubit-indices",
+                "none",
+                "0",
+                "3",
+                "--output-root",
+                "/tmp/all-noise",
+            ]
+        )
+
+        self.assertIn("run-all-noise-mitigation-comparison", help_text)
+        self.assertEqual(args.noise_model_names, ["depolarizing", "phase_damping"])
+        self.assertEqual(args.mitigation_methods, ["none", "symmetry_regularized"])
+        self.assertEqual(args.noisy_qubit_indices, [None, 0, 3])
+
+    def test_all_noise_mitigation_expansion_counts_jobs_and_rejects_unknown_methods(self) -> None:
+        config = AllNoiseMitigationComparisonConfig(
+            model_families=("su2_qcnn",),
+            num_qubits_values=(4,),
+            train_sizes=(4,),
+            epochs_values=(1,),
+            random_seeds=(0,),
+            noise_model_names=("depolarizing", "phase_damping"),
+            noise_strength_values=(0.0, 0.01),
+            mitigation_methods=("none", "symmetry_regularized"),
+            symmetry_regularization_beta_values=(0.01, 0.1),
+            dense_test_points=11,
+        )
+
+        specs = enumerate_all_noise_mitigation_configs(config)
+
+        self.assertEqual(len(specs), 4)
+        self.assertEqual(count_all_noise_mitigation_jobs(config), 12)
+        self.assertEqual(
+            {(spec.noise_model_name, spec.mitigation_method) for spec in specs},
+            {
+                ("depolarizing", "none"),
+                ("depolarizing", "symmetry_regularized"),
+                ("phase_damping", "none"),
+                ("phase_damping", "symmetry_regularized"),
+            },
+        )
+        symreg_spec = next(spec for spec in specs if spec.mitigation_method == "symmetry_regularized")
+        self.assertIsNotNone(symreg_spec.config)
+        self.assertEqual(
+            [job.symmetry_regularization_beta for job in enumerate_noisy_comparison_jobs(symreg_spec.config)[:2]],
+            [0.01, 0.1],
+        )
+
+        with self.assertRaisesRegex(ValueError, "mitigation_methods"):
+            AllNoiseMitigationComparisonConfig(mitigation_methods=("unsupported",))
+
+    def test_mitigation_and_expected_symmetry_breaking_metadata(self) -> None:
+        config = NoisyComparisonConfig(
+            model_families=("su2_qcnn",),
+            num_qubits_values=(4,),
+            train_sizes=(2,),
+            epochs_values=(1,),
+            random_seeds=(0,),
+            noise_model_name="phase_damping",
+            noise_strength_values=(0.01,),
+            mitigation_method="symmetry_regularized",
+            noise_application_scope="active",
+            noisy_qubit_indices=(0,),
+            selected_noisy_qubit_pattern="single_edge",
+            symmetry_regularization=True,
+            symmetry_regularization_weight=0.01,
+            dense_test_points=11,
+        )
+        job = enumerate_noisy_comparison_jobs(config)[0]
+        resolved_noise = noise_config_from_strength(
+            "phase_damping",
+            0.01,
+            noise_application_scope="selected_qubits",
+            noisy_qubits=(0,),
+        )
+
+        metadata = _mitigation_metadata(config, resolved_noise, job)
+
+        self.assertEqual(metadata["mitigation_method"], "symmetry_regularized")
+        self.assertEqual(metadata["expected_symmetry_breaking"], "true")
+        self.assertEqual(metadata["expected_symmetry_breaking_note"], "localized_noise_breaks_site_uniformity")
+        self.assertEqual(metadata["selected_noisy_qubit_pattern"], "single_edge")
+        self.assertEqual(
+            _expected_symmetry_breaking_metadata("depolarizing", "active", None),
+            ("unknown", "global_depolarizing_channel_effect_unclear"),
+        )
+        self.assertEqual(
+            _expected_symmetry_breaking_metadata("amplitude_damping", "active", None),
+            ("true", "nonunital_amplitude_damping"),
+        )
 
     def test_default_job_output_dir_preserves_legacy_layout(self) -> None:
         config = NoisyComparisonConfig(
@@ -624,6 +733,103 @@ class NoisyComparisonTests(unittest.TestCase):
         self.assertTrue(all(row["train_noise_includes_zero"] is False for row in aggregated))
         self.assertTrue(all(row["eval_noise_strength"] == 0.05 for row in aggregated))
         self.assertTrue(all("final_symmetry_penalty" in row for row in aggregated))
+
+    def test_aggregation_keeps_mitigation_method_noise_model_and_localization_separate(self) -> None:
+        rows = [
+            self._minimal_run_row(
+                job_index=0,
+                mitigation_method="none",
+                noise_model_name="depolarizing",
+                expected_symmetry_breaking="unknown",
+                expected_symmetry_breaking_note="global_depolarizing_channel_effect_unclear",
+                selected_noisy_qubit_pattern="none",
+            ),
+            self._minimal_run_row(
+                job_index=1,
+                mitigation_method="symmetry_regularized",
+                noise_model_name="depolarizing",
+                expected_symmetry_breaking="unknown",
+                expected_symmetry_breaking_note="global_depolarizing_channel_effect_unclear",
+                symmetry_regularization=True,
+                symmetry_regularization_enabled=True,
+                symmetry_regularization_beta=0.1,
+                symmetry_regularization_weight=0.1,
+                selected_noisy_qubit_pattern="none",
+            ),
+            self._minimal_run_row(
+                job_index=2,
+                mitigation_method="none",
+                noise_model_name="phase_damping",
+                expected_symmetry_breaking="true",
+                expected_symmetry_breaking_note="basis_selective_dephasing",
+                selected_noisy_qubit_pattern="none",
+            ),
+            self._minimal_run_row(
+                job_index=3,
+                mitigation_method="none",
+                noise_model_name="phase_damping",
+                expected_symmetry_breaking="true",
+                expected_symmetry_breaking_note="localized_noise_breaks_site_uniformity",
+                noise_application_scope="selected_qubits",
+                noisy_qubit_index=0,
+                noisy_qubits=[0],
+                selected_noisy_qubit_pattern="single_qubit",
+            ),
+        ]
+
+        aggregated = aggregate_noisy_comparison_runs(rows)
+
+        self.assertEqual(len(aggregated), 4)
+        self.assertEqual(
+            {
+                (row["noise_model_name"], row["mitigation_method"], row["selected_noisy_qubit_pattern"])
+                for row in aggregated
+            },
+            {
+                ("depolarizing", "none", "none"),
+                ("depolarizing", "symmetry_regularized", "none"),
+                ("phase_damping", "none", "none"),
+                ("phase_damping", "none", "single_qubit"),
+            },
+        )
+        symreg_row = next(row for row in aggregated if row["mitigation_method"] == "symmetry_regularized")
+        self.assertEqual(symreg_row["symmetry_regularization_beta"], 0.1)
+        localized_row = next(row for row in aggregated if row["selected_noisy_qubit_pattern"] == "single_qubit")
+        self.assertEqual(localized_row["expected_symmetry_breaking"], "true")
+
+    def test_all_noise_aggregation_preserves_stage2_and_stage3_fields(self) -> None:
+        rows = [
+            self._minimal_run_row(
+                job_index=0,
+                mitigation_method="noise_aware_training",
+                noise_aware_training=True,
+                training_noise_strengths=[0.01, 0.03, 0.05],
+                train_noise_strength_values=[0.01, 0.03, 0.05],
+                train_noise_sampling_mode="per_epoch_random_choice",
+                train_noise_includes_zero=False,
+            ),
+            self._minimal_run_row(
+                job_index=1,
+                mitigation_method="symmetry_regularized",
+                symmetry_regularization=True,
+                symmetry_regularization_enabled=True,
+                symmetry_regularization_beta=0.05,
+                symmetry_regularization_weight=0.05,
+                final_symmetry_penalty=0.02,
+                final_equivariance_error_mean=0.03,
+                final_equivariance_error_max=0.04,
+            ),
+        ]
+
+        aggregated = aggregate_noisy_comparison_runs(rows)
+
+        noise_aware_row = next(row for row in aggregated if row["mitigation_method"] == "noise_aware_training")
+        symreg_row = next(row for row in aggregated if row["mitigation_method"] == "symmetry_regularized")
+        self.assertEqual(noise_aware_row["train_noise_strength_values"], [0.01, 0.03, 0.05])
+        self.assertFalse(noise_aware_row["train_noise_includes_zero"])
+        self.assertEqual(symreg_row["symmetry_regularization_beta"], 0.05)
+        self.assertEqual(symreg_row["symmetry_regularization_weight"], 0.05)
+        self.assertEqual(symreg_row["final_symmetry_penalty"], 0.02)
 
     def test_aggregate_only_writes_summary_with_noise_fields(self) -> None:
         config = self._tiny_config()
