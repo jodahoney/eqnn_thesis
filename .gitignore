@@ -11,6 +11,9 @@ __pycache__/
 logs/slurm/*
 !logs/slurm/.gitkeep
 slurm-*.*
+*.log
+*.out
+*.err
 
 # C extensions
 *.so
